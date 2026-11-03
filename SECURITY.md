@@ -1,11 +1,12 @@
 # Security and privacy
 
-This is a local review candidate; there is no supported release or published
-security-reporting endpoint yet. Report suspected vulnerabilities directly to
-the maintainer through the private channel where this checkout was shared. Once
-a public repository exists, its owner should enable GitHub private vulnerability
-reporting and document that link here. Do not disclose credentials or exploitable
-details in a public issue.
+Report suspected vulnerabilities through
+[GitHub private vulnerability reporting](https://github.com/vitofico/kubernetes-homelab-kit/security/advisories/new).
+Do not disclose credentials or exploitable details in a public issue.
+
+This project is an early-stage template with no tagged stable release yet.
+Security fixes are developed on the default branch; no support window or
+response-time guarantee has been established.
 
 Include a minimal reproduction with synthetic data, affected files or revision,
 impact, and suggested mitigation. Redact tokens, private domains, user IDs,

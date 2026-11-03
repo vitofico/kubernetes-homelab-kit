@@ -1,13 +1,16 @@
 # Kubernetes Homelab Kit
 
+[![CI](https://github.com/vitofico/kubernetes-homelab-kit/actions/workflows/checks.yaml/badge.svg)](https://github.com/vitofico/kubernetes-homelab-kit/actions/workflows/checks.yaml)
+
 **Your services, your Kubernetes cluster, one place to configure them.**
 
 Build a self-hosted home for photos, books, media, files, and monitoring. Start
 with a disposable Docker kind cluster, then adapt the same Kustomize applications
 to your server. Keep instance settings and credentials out of Git.
 
-**Status:** local review candidate. Server deployment and publication await owner
-review. See [executed tests and limits](docs/testing.md).
+**Status:** early-stage open-source template. Docker kind coverage is documented;
+physical-server and external-provider integrations need operator acceptance.
+See [executed tests and limits](docs/testing.md).
 
 ## Why use it?
 
@@ -33,6 +36,8 @@ checksum-verified installation commands. `make tools` installs Python dependenci
 it does not install the other tools.
 
 ```sh
+git clone https://github.com/vitofico/kubernetes-homelab-kit.git
+cd kubernetes-homelab-kit
 make tools
 make configure
 make doctor
@@ -49,6 +54,12 @@ It does not deploy the configuration you just edited. Diagnostics stay local.
 For repeatable setup, edit `local/site.yaml` and run
 `make configure CONFIGURE_FLAGS=--non-interactive`. See the
 [configuration reference](config/README.md) for inputs and secret management.
+
+For your own independent copy, choose
+[Use this template](https://github.com/vitofico/kubernetes-homelab-kit/generate).
+Report reproducible bugs or suggest improvements in
+[Issues](https://github.com/vitofico/kubernetes-homelab-kit/issues); use the private
+reporting process in [SECURITY.md](SECURITY.md) for vulnerabilities.
 
 ## What's included
 

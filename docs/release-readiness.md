@@ -1,6 +1,6 @@
-# Local review candidate
+# Publication and release checklist
 
-This repository is intended for local review before any publication. It has fresh Git history, no configured remote, and a synthetic example configuration. Instance-specific operational records and encrypted production secrets are excluded.
+This open-source template uses fresh sanitized Git history and a synthetic example configuration. Instance-specific operational records and encrypted production secrets are excluded. Repeat these checks before publishing future changes or releases.
 
 ## Review before publication
 
@@ -21,6 +21,6 @@ The server profile assumes an existing Kubernetes cluster and storage services. 
 
 Local runtime configuration, credentials, keys, manifests, cluster logs, and test diagnostics belong under ignored directories. Public CI must use synthetic data. Do not merge private operational Git history into this repository or publish a private identifier denylist as a test fixture.
 
-Creation of a public remote and the first push are held for the owner's review of the sanitized version.
+The initial public snapshot was reviewed before publication. Future changes must preserve this boundary: publish only reviewed Git content, never the ignored local workspace or private audit evidence.
 
 Argo uses client authentication; operators must supply their own Kubernetes authentication token when accessing its UI. Application enrollment and account creation remain application-specific.

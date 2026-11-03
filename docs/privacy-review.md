@@ -22,4 +22,4 @@ A separate private review compares the export against instance identifiers disco
 
 The review boundary includes all tracked files and commit metadata, plus the final archive. Local credentials, rendered configurations, diagnostics, test kubeconfigs, and virtual environments must remain excluded. Re-run the checks whenever candidate contents change.
 
-Publication is held for owner review. This record is a description of the review process, not a substitute for reviewing the actual contents and test coverage.
+The initial sanitized snapshot was approved for publication after independent privacy and setup reviews. Repeat the reviews for future changes and keep private instance data outside Git. This record describes the review process; inspect the actual contents and test coverage for each proposed release.
