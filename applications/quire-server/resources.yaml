@@ -16,6 +16,50 @@ spec:
     app: postgres-opds-sync
   type: ClusterIP
 ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quire-server
+  namespace: calibre-web
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: ebooks.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: quire-server
+            port:
+              number: 80
+        path: /sync/
+        pathType: Prefix
+      - backend:
+          service:
+            name: quire-server
+            port:
+              number: 80
+        path: /ai/
+        pathType: Prefix
+      - backend:
+          service:
+            name: quire-server
+            port:
+              number: 80
+        path: /library/
+        pathType: Prefix
+      - backend:
+          service:
+            name: quire-server
+            port:
+              number: 80
+        path: /quire-admin
+        pathType: Prefix
+  tls:
+  - hosts:
+    - ebooks.__DOMAIN__
+    secretName: quire-server-tls
+---
 apiVersion: v1
 kind: Service
 metadata:

@@ -58,14 +58,13 @@ metadata:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
   labels:
     app: ftp-camera
   name: ftp-camera
   namespace: ftp-camera
 spec:
   externalTrafficPolicy: Local
+  loadBalancerIP: __FTP_IP__
   ports:
   - name: ftp
     port: 21
@@ -216,7 +215,7 @@ spec:
               key: FTP_PASS
               name: ftp-camera-credentials
         - name: PASV_ADDRESS
-          value: __NFS_SERVER__
+          value: __FTP_IP__
         - name: PASV_MIN_PORT
           value: '40000'
         - name: PASV_MAX_PORT

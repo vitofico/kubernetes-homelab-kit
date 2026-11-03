@@ -19,6 +19,11 @@ The pinned Kubernetes node image and checksum-verified Calico installation provi
 an environment where NetworkPolicy is enforced. The cluster setup follows the
 [official Calico kind guide](https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind).
 
+The CLI uses a conservative rollout wait derived from declared startup probes,
+with a five-minute floor and two-minute readiness allowance. Kubernetes controller
+progress-deadline errors remain failures. Each broader catalog case has a bounded
+30-minute ceiling; this does not guarantee readiness on an undersized cluster.
+
 The default suite exercises the normal configuration and deployment commands with
 Traefik, cert-manager, Audiobookshelf, and Uptime Kuma:
 
@@ -31,10 +36,18 @@ Traefik, cert-manager, Audiobookshelf, and Uptime Kuma:
 - Domain changes applied to application ingresses.
 - Scoped cluster teardown, including failure paths.
 
+A separate fixture uses an inert Python process in place of the external Hermes
+image while retaining its real initialization, volumes, identity, and policies.
+Five checks verify nonroot state/skill setup; read-only agent and named broker
+RBAC; actual API status and fixed restart with auth/body/target/cooldown rejection;
+NetworkPolicy denial for an unrelated client; and explicit revocation preserving
+the agent and application. No real model or chat service is contacted.
+
 Run `make validate-all VALIDATE_FLAGS=--prepare` once to prepare the pinned validator
 and schemas, then `make validate-all` validates offline. This covers all 19
 application bases against Kubernetes 1.37 and embedded CRD schemas; unknown
-schemas and invalid objects fail the check. No schema skips are accepted. `kind_supported` in the catalog
+schemas and invalid objects fail the check. Unit tests also render each isolated
+module with dependency expansion and check all Ingress backend Services/ports. No schema skips are accepted. `kind_supported` in the catalog
 means that an application has a kind adapter, not that every external integration
 or application feature has been certified. Modules requiring operator-provided
 images, physical camera connectivity, LAN DNS, or bare-metal load-balancer pools
@@ -43,15 +56,16 @@ locally and excluded from the publication snapshot.
 
 ## Verification record
 
-On 2026-11-03 the fresh default kind profile passed all ten checks listed above,
+On 2026-11-03 the fresh default kind profile and synthetic Hermes fixture passed
+all fifteen assertions,
 including certificate trust, hostname checks, same-host HTTPS redirects,
 persistence, network-policy enforcement, repeated setup, and domain changes.
 The environment used kind 0.33.0, Kubernetes 1.37.0, Calico 3.33.0, and Docker
 29.9.2 with Linux/arm64 nodes.
 
-The final configuration and safety unit run passed 33 tests.
+The final configuration, broker, revocation, routing, and safety unit run passed 72 tests.
 
-The strict schema pass validated 322 objects across all 19 modules with zero
+The strict schema pass validated 330 objects across all 19 modules with zero
 invalid objects, errors, or skipped schemas. Negative checks confirmed that an
 invalid native object, invalid custom resource, and missing schema fail.
 
@@ -87,6 +101,11 @@ complete third-party application feature tests. The server profile is schema-
 validated; real NFS exports, storage ownership, external providers, and hardware
 still require operator verification. No live server deployment was performed.
 
+The full catalog first pass found a short Authentik rollout wait and optional
+Quire routes declared by Calibre-Web. After fixing them, fresh targeted rechecks
+passed both modules. The combined result covers all 12 kind-compatible modules;
+the first failing run and successful rechecks remain distinct in private logs.
+
 Final teardown used the explicit test kubeconfig. Verification confirmed that only
-the owned test cluster was removed and every other existing kind cluster was
-preserved. The harness then completed with exit status zero.
+the owned test cluster was removed and the unrelated cluster inventory was
+preserved. No live server deployment or global Docker cleanup was performed.

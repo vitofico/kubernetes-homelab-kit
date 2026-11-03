@@ -19,7 +19,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           sudo apt-get update
-          sudo apt-get install -y age shellcheck yamllint
+          sudo apt-get install -y age shellcheck
       - name: Install pinned kind and SOPS
         run: |
           curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64

@@ -93,7 +93,7 @@ try:
         https_ingress(app,path)
         passed(app+' HTTPS ingress with trusted certificate and hostname verification')
         before=pod(app)
-        marker=mount+'/homelab-kit-persistence-test'
+        marker=mount+'/kubernetes-homelab-kit-persistence-test'
         k('-n',app,'exec',before,'--','sh','-c','printf synthetic-test-data > "$1"','sh',marker)
         k('-n',app,'delete','pod',before,'--wait=true')
         k('-n',app,'rollout','status','deployment/'+app,'--timeout=180s')

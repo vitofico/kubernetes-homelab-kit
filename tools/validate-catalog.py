@@ -131,6 +131,10 @@ def main():
     cfg = lab.load(ROOT / 'config/site.example.yaml')
     catalog = lab.catalog()
     cfg.update(profile='server', domain='schema.example.net', applications=list(catalog))
+    cfg['network']['ftp_ip'] = '192.0.2.11'
+    cfg['hermes'] = {'api_cidrs': ['192.0.2.1/32'],
+                     'repair_targets': [{'namespace': 'audiobookshelf', 'deployment': 'audiobookshelf'}],
+                     'telegram': {'enabled': True, 'allowed_users': ['123456789']}}
     # These references are schema fixtures only; no container is started or claimed compatible.
     cfg['images'] = {marker: 'registry.k8s.io/pause:3.10' for entry in catalog.values() for marker in entry.get('required_images', {})}
     site = WORK / 'site.yaml'

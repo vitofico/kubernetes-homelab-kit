@@ -26,6 +26,8 @@ physical hardware or external integrations and cannot run in kind.
 | `network.lan_cidr` | Permitted LAN range for applicable network policies |
 | `network.loadbalancer_ip` | Pins the server-profile Traefik LoadBalancer address and supplies the matching DNS address; other LoadBalancer services use automatic pool allocation |
 | `network.loadbalancer_pool` | Optional ordered `start-end` range for MetalLB, inside the LAN, containing `loadbalancer_ip`, excluding the NFS server |
+| `network.ftp_ip` | Required for server `ftp-camera`: distinct pool address used for both its Service and passive FTP advertisement |
+| `hermes` | Optional API endpoint CIDRs, named restart targets, and Telegram access settings; see [Hermes setup](../docs/hermes.md) |
 | `images` | Overrides required by catalog `required_images`; keys may include surrounding double underscores or omit them |
 
 `configure --non-interactive` accepts the checked-in kind defaults. For automation,

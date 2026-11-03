@@ -2,11 +2,18 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=${1:?usage: bootstrap.sh WORK_DIRECTORY}
-NAME=${TEST_CLUSTER_NAME:-homelab-kit-review}
+NAME=${TEST_CLUSTER_NAME:-kubernetes-homelab-kit-review}
 mkdir -p "$WORK"
 WORK=$(cd "$WORK" && pwd)
 export KIND_EXPERIMENTAL_PROVIDER=docker
 [[ "$NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "Invalid test cluster name" >&2; exit 1; }
+# The harness holds this name lock until all cleanup has finished, including
+# cleanup after a partial create. Never infer ownership from an absent inventory
+# entry without serializing other harness runs through the entire lifecycle.
+if [[ ! -f "${KIND_TEST_LOCK:-}/owner" ]] || [[ "$(cat "$KIND_TEST_LOCK/owner")" != "$WORK" ]]; then
+  echo 'Run bootstrap through tests/test-kind.sh so the cluster name stays locked.' >&2
+  exit 1
+fi
 CLUSTERS=$(kind get clusters)
 if printf '%s\n' "$CLUSTERS" | grep -Fxq "$NAME"; then
   echo "Refusing to replace existing cluster $NAME" >&2

@@ -39,6 +39,10 @@ test-kind:
 test-kind-all:
 	KIND_TEST_EXTRA_SCRIPT="$(CURDIR)/tools/test-catalog-hook.sh" ./tests/test-kind.sh
 
+.PHONY: hermes-revoke
+hermes-revoke:
+	./scripts/revoke-hermes.sh "$(KUBECONFIG_PATH)"
+
 VALIDATE_FLAGS ?=
 .PHONY: validate-all
 validate-all:

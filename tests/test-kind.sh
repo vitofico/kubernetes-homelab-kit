@@ -9,10 +9,16 @@ else
   PYTHON=${PYTHON:-python3}
 fi
 export PYTHON
-NAME=${TEST_CLUSTER_NAME:-homelab-kit-review}
 mkdir -p "$ROOT/local/test-work"
 WORK=$(mktemp -d "$ROOT/local/test-work/run.XXXXXX")
+SUFFIX=$(printf '%s' "${WORK##*.}" | tr '[:upper:]' '[:lower:]')
+NAME=${TEST_CLUSTER_NAME:-kubernetes-homelab-kit-review-$SUFFIX}
+[[ "$NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "Invalid test cluster name" >&2; exit 1; }
 export TEST_CLUSTER_NAME="$NAME"
+LOCK_ROOT=${TMPDIR:-/tmp}/kubernetes-homelab-kit-kind-locks
+KIND_TEST_LOCK=$LOCK_ROOT/$NAME.lock
+export KIND_TEST_LOCK
+LOCK_HELD=0
 cleanup() {
   local status=$?
   if [[ -f "$WORK/created-cluster" ]]; then
@@ -25,10 +31,21 @@ cleanup() {
       kind delete cluster --name "$NAME" --kubeconfig "$WORK/kubeconfig" > "$WORK/cleanup.log" 2>&1 || status=1
     fi
   fi
+  if [[ "$LOCK_HELD" == 1 ]]; then
+    rm -f "$KIND_TEST_LOCK/owner"
+    rmdir "$KIND_TEST_LOCK" || status=1
+  fi
   printf 'Test exit status: %s\nPrivate diagnostics: %s\n' "$status" "$WORK"
   exit "$status"
 }
 trap cleanup EXIT
+mkdir -p "$LOCK_ROOT"
+if ! mkdir "$KIND_TEST_LOCK" 2>/dev/null; then
+  echo "Another test run owns cluster name $NAME; choose a different TEST_CLUSTER_NAME." >&2
+  exit 1
+fi
+LOCK_HELD=1
+printf '%s\n' "$WORK" > "$KIND_TEST_LOCK/owner"
 for cmd in docker kind kubectl curl sops age-keygen; do command -v "$cmd" >/dev/null; done
 mkdir -p local/test-work
 ./tests/kind/bootstrap.sh "$WORK" > "$WORK/bootstrap.log" 2>&1
@@ -44,6 +61,7 @@ PY
 ./scripts/lab render --config "$WORK/site.yaml" --output "$WORK/render-repeat"
 cmp "$WORK/render-before/resources.yaml" "$WORK/render-repeat/resources.yaml"
 echo 'PASS repeated deployment and deterministic rendering'
+"$PYTHON" tests/kind/hermes.py "$WORK/kubeconfig" "$WORK/site.yaml" "$WORK"
 "$PYTHON" - "$WORK/site.yaml" <<'PY'
 import pathlib,sys,yaml
 p=pathlib.Path(sys.argv[1]); c=yaml.safe_load(p.read_text()); c['domain']='changed.example.test'; p.write_text(yaml.safe_dump(c,sort_keys=False))

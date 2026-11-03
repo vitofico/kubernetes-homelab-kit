@@ -10,8 +10,6 @@ metadata:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
   name: coredns-external
   namespace: kube-system
 spec:

@@ -1,5 +1,5 @@
 profile: kind
-cluster_name: homelab-kit-test
+cluster_name: kubernetes-homelab-kit-test
 domain: lab.example.test
 tls:
   mode: selfsigned
@@ -19,3 +19,10 @@ network:
   loadbalancer_ip: 192.0.2.10
   loadbalancer_pool: 192.0.2.10-192.0.2.19
 images: {}
+hermes:
+  api_cidrs: []
+  api_ports: [443, 6443]
+  repair_targets: []
+  telegram:
+    enabled: false
+    allowed_users: []

@@ -139,7 +139,9 @@ def main():
                     recipient=lab.run(['age-keygen','-y',keyfile]).strip()
                     encrypted=lab.run(['sops','encrypt','--age',recipient,'--input-type','yaml','--output-type','yaml','/dev/stdin'],data=lab.dump(values))
                     lab.write_private(site.parent/'secrets.sops.yaml',encrypted)
-                subprocess.run(cmd+['up','--config',str(site),'--kubeconfig',str(kube)],stdout=output,stderr=output,env=env,check=True,timeout=900)
+                # Authentik's declared startup-probe budget reaches 1320s;
+                # leave room for dependency readiness within this bounded case.
+                subprocess.run(cmd+['up','--config',str(site),'--kubeconfig',str(kube)],stdout=output,stderr=output,env=env,check=True,timeout=1800)
             result['https_endpoints_checked']=check_ingresses(kube,lab.documents(expanded),directory)
             result['status']='passed'
         except (subprocess.CalledProcessError,subprocess.TimeoutExpired,lab.Error) as error:

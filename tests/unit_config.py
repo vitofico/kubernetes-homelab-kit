@@ -56,12 +56,41 @@ class ConfigurationTests(unittest.TestCase):
             with self.subTest(field=key), self.assertRaises(lab.Error):
                 lab.config(self.path)
 
+    def test_ip_and_cidr_fields_reject_yaml_nonstring_values_before_rendering(self):
+        for section, key in (('storage', 'nfs_server'), ('network', 'lan_cidr'), ('network', 'loadbalancer_ip')):
+            for value in (False, True, 0, 3221225995, None, [], {}):
+                cfg = copy.deepcopy(self.cfg)
+                cfg[section][key] = value
+                self.path.write_text(yaml.safe_dump(cfg))
+                with self.subTest(section=section, field=key, value=value), self.assertRaisesRegex(lab.Error, 'must be a string'):
+                    lab.config(self.path)
+
     def test_cluster_target_is_explicit(self):
         with self.assertRaises(lab.Error):
             lab.kube(argparse.Namespace(kubeconfig=''))
         kube = self.root / 'kubeconfig'
         kube.write_text('test')
         self.assertEqual(lab.kube(argparse.Namespace(kubeconfig=str(kube)))[1:], ['--kubeconfig', str(kube.resolve())])
+
+    def test_rollout_timeout_defaults_to_five_minutes_without_startup_probe(self):
+        obj = {'kind': 'Deployment', 'spec': {'template': {'spec': {'containers': [
+            {'name': 'app', 'readinessProbe': {'initialDelaySeconds': 10, 'periodSeconds': 5}}
+        ]}}}}
+        self.assertEqual(lab.rollout_timeout(obj), 300)
+
+    def test_rollout_timeout_honors_actual_authentik_startup_budgets(self):
+        source = Path(__file__).resolve().parents[1] / 'applications/authentik/resources.yaml'
+        deployments = {obj['metadata']['name']: obj for obj in yaml.safe_load_all(source.read_text())
+                       if obj and obj.get('kind') == 'Deployment'}
+        self.assertEqual(lab.rollout_timeout(deployments['authentik-server']), 720)
+        self.assertEqual(lab.rollout_timeout(deployments['authentik-worker']), 1320)
+
+    def test_rollout_timeout_uses_largest_parallel_container_window(self):
+        obj = {'kind': 'Deployment', 'spec': {'template': {'spec': {'containers': [
+            {'name': 'first', 'startupProbe': {'initialDelaySeconds': 5, 'failureThreshold': 20, 'periodSeconds': 10}},
+            {'name': 'second', 'startupProbe': {'initialDelaySeconds': 7, 'failureThreshold': 10, 'periodSeconds': 5, 'timeoutSeconds': 30}}
+        ]}}}}
+        self.assertEqual(lab.rollout_timeout(obj), 427)
 
     def test_certmanager_api_wait_retries_webhook_propagation(self):
         outcomes = [SimpleNamespace(returncode=1, stderr='Internal error: failed calling webhook: connection refused'), SimpleNamespace(returncode=0, stderr='')]
@@ -392,6 +421,16 @@ data: {zone: 'app.__DOMAIN__ IN A __LOADBALANCER_IP__'}
         before = self.path.read_bytes()
         lab.configure(args)
         self.assertEqual(before, self.path.read_bytes())
+
+    def test_server_wizard_accepts_omitted_optional_pool(self):
+        self.cfg['profile'] = 'server'
+        self.cfg['domain'] = 'lab.example.net'
+        self.cfg['network'].pop('loadbalancer_pool')
+        self.write()
+        args = argparse.Namespace(config=str(self.path), profile=None, non_interactive=False)
+        with patch('builtins.input', return_value=''):
+            lab.configure(args)
+        self.assertEqual(lab.config(self.path)['network']['loadbalancer_pool'], '192.0.2.10-192.0.2.19')
 
 
 if __name__ == '__main__':

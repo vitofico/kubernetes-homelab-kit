@@ -52,8 +52,10 @@ subjects:
 ---
 apiVersion: v1
 data:
-  config.yaml: "model:\n  provider: anthropic\n  default: claude-sonnet-4-6\nagent:\n
-    \ max_turns: 20\nplatforms: {}\n"
+  config.yaml: "model:\n  provider: anthropic\n  default: claude-sonnet-4-6\nagent:\n\
+    \  max_turns: 20\nplatforms:\n  webhook:\n    enabled: true\n    extra:\n    \
+    \  routes:\n        uptime-kuma:\n          toolsets: []\n          deliver: log\n\
+    \      host: 0.0.0.0\n"
   SOUL.md: 'You are a helpful assistant. Follow the operator instructions and protect
     private data.
 
@@ -120,6 +122,26 @@ spec:
             secretKeyRef:
               key: anthropic
               name: ai-provider-keys
+        - name: HOME
+          value: /opt/data
+        - name: HERMES_HOME
+          value: /opt/data/.hermes
+        - name: HERMES_WRITE_SAFE_ROOT
+          value: /opt/data
+        - name: WEBHOOK_ENABLED
+          value: 'true'
+        - name: WEBHOOK_PORT
+          value: '8644'
+        - name: WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: hermes-agent-secrets
+              key: HERMES_WEBHOOK_SECRET
+        - name: HERMES_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: hermes-agent-secrets
+              key: HERMES_WEBHOOK_SECRET
         image: __IMAGE_HERMES_AGENT__
         imagePullPolicy: Always
         livenessProbe:
@@ -158,27 +180,65 @@ spec:
         volumeMounts:
         - mountPath: /opt/data
           name: hermes-data
+        - name: hermes-ops-code
+          mountPath: /opt/hermes-ops
+          readOnly: true
       initContainers:
-      - command:
+      - name: prepare-hermes-home
+        image: busybox:1.37
+        command:
         - sh
-        - -c
-        - mkdir -p /opt/data/.hermes; cp /config-ro/config.yaml /opt/data/.hermes/config.yaml;
-          cp /config-ro/SOUL.md /opt/data/.hermes/SOUL.md
-        image: busybox:1.38
-        name: copy-config
+        - -ec
+        args:
+        - test ! -L /opt/data/.hermes; mkdir -p /opt/data/.hermes; chown 10000:10000
+          /opt/data /opt/data/.hermes; chmod u+rwx /opt/data /opt/data/.hermes
         securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          runAsNonRoot: false
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - CHOWN
+            - FOWNER
+        volumeMounts:
+        - name: hermes-data
+          mountPath: /opt/data
+      - name: copy-config
+        image: busybox:1.37
+        command:
+        - sh
+        - -ec
+        args:
+        - mkdir -p /opt/data/.hermes/skills/cluster-ops; cp /config-ro/config.yaml
+          /opt/data/.hermes/config.yaml; cp /config-ro/SOUL.md /opt/data/.hermes/SOUL.md;
+          cp /skill-ro/SKILL.md /opt/data/.hermes/skills/cluster-ops/SKILL.md
+        securityContext:
+          runAsUser: 10000
+          runAsGroup: 10000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
         volumeMounts:
-        - mountPath: /opt/data
-          name: hermes-data
-        - mountPath: /config-ro
-          name: hermes-config
+        - name: hermes-data
+          mountPath: /opt/data
+        - name: hermes-config
+          mountPath: /config-ro
+          readOnly: true
+        - name: hermes-ops-skill
+          mountPath: /skill-ro
+          readOnly: true
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
       serviceAccountName: hermes-agent
       volumes:
       - name: hermes-data
@@ -187,71 +247,12 @@ spec:
       - configMap:
           name: hermes-agent-config
         name: hermes-config
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-egress-dns
-  namespace: agent
-spec:
-  egress:
-  - ports:
-    - port: 53
-      protocol: UDP
-    - port: 53
-      protocol: TCP
-    to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-  podSelector: {}
-  policyTypes:
-  - Egress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-egress-https
-  namespace: agent
-spec:
-  egress:
-  - ports:
-    - port: 443
-      protocol: TCP
-    to:
-    - ipBlock:
-        cidr: 0.0.0.0/0
-        except:
-        - 10.0.0.0/8
-        - __LAN_CIDR__
-        - __LAN_CIDR__
-  podSelector:
-    matchLabels:
-      app: hermes-agent
-  policyTypes:
-  - Egress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-egress-mediaserver
-  namespace: agent
-spec:
-  egress:
-  - ports:
-    - port: 7878
-      protocol: TCP
-    - port: 8989
-      protocol: TCP
-    to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: k8s-mediaserver
-  podSelector:
-    matchLabels:
-      app: hermes-agent
-  policyTypes:
-  - Egress
+      - name: hermes-ops-code
+        configMap:
+          name: hermes-ops-code
+      - name: hermes-ops-skill
+        configMap:
+          name: hermes-ops-skill
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

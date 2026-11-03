@@ -2,6 +2,7 @@
 """Small, explicit configuration/render/deploy interface for the template."""
 import argparse
 import copy
+import importlib.util
 import ipaddress
 import hashlib
 import json
@@ -21,6 +22,9 @@ except ImportError:
     sys.exit("PyYAML is required. Run make tools, then retry.")
 
 ROOT = Path(__file__).resolve().parent.parent
+_hermes_spec = importlib.util.spec_from_file_location('homelab_hermes', Path(__file__).with_name('hermes.py'))
+hermes = importlib.util.module_from_spec(_hermes_spec)
+_hermes_spec.loader.exec_module(hermes)
 MARKER = re.compile(r"__[A-Z][A-Z0-9_]*__")
 SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 SAFE_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
@@ -28,6 +32,7 @@ INTERNAL_SECRET_KEYS = {
     "password", "db-password", "mariadb-root-password", "redis-password", "postgres-password",
     "DB_PASSWORD", "POSTGRES_PASSWORD", "FTP_PASS", "HERMES_WEBHOOK_SECRET", "webhook-shared-secret",
     "AUTHENTIK_BOOTSTRAP_PASSWORD", "AUTHENTIK_BOOTSTRAP_TOKEN", "AUTHENTIK_POSTGRESQL__PASSWORD", "AUTHENTIK_SECRET_KEY",
+    "REPAIR_TOKEN",
 }
 
 
@@ -109,7 +114,9 @@ def exact_keys(obj, required, where):
 
 def config(path):
     cfg = load(path)
-    exact_keys(cfg, ["profile", "cluster_name", "domain", "tls", "applications", "storage", "network", "images"], "site.yaml")
+    if isinstance(cfg, dict):
+        cfg.setdefault('hermes', copy.deepcopy(hermes.DEFAULTS))
+    exact_keys(cfg, ["profile", "cluster_name", "domain", "tls", "applications", "storage", "network", "images", "hermes"], "site.yaml")
     if cfg["profile"] not in ("kind", "server"):
         raise Error("profile must be kind or server")
     if not isinstance(cfg["cluster_name"], str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,50}", cfg["cluster_name"]):
@@ -144,8 +151,11 @@ def config(path):
     if not isinstance(storage["class_name"], str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", storage["class_name"]):
         raise Error("storage.class_name must be a lowercase DNS label (1-63 characters)")
     net = cfg["network"]
-    if not isinstance(net, dict) or not {"lan_cidr", "loadbalancer_ip"}.issubset(net) or set(net) - {"lan_cidr", "loadbalancer_ip", "loadbalancer_pool"}:
-        raise Error("network requires lan_cidr and loadbalancer_ip; optional loadbalancer_pool")
+    if not isinstance(net, dict) or not {"lan_cidr", "loadbalancer_ip"}.issubset(net) or set(net) - {"lan_cidr", "loadbalancer_ip", "loadbalancer_pool", "ftp_ip"}:
+        raise Error("network requires lan_cidr and loadbalancer_ip; optional loadbalancer_pool and ftp_ip")
+    for section, key in (('storage', 'nfs_server'), ('network', 'lan_cidr'), ('network', 'loadbalancer_ip')):
+        if not isinstance(cfg[section][key], str):
+            raise Error(f'{section}.{key} must be a string')
     try:
         ipaddress.ip_address(cfg["storage"]["nfs_server"])
         lan = ipaddress.ip_network(cfg["network"]["lan_cidr"], strict=True)
@@ -160,8 +170,16 @@ def config(path):
         if start not in lan or end not in lan or not start <= lb <= end or start > end or (nfs.version == start.version and start <= nfs <= end):
             raise ValueError()
         net["loadbalancer_pool"] = pool
+        if 'ftp_ip' in net:
+            if not isinstance(net['ftp_ip'], str):
+                raise ValueError()
+            ftp = ipaddress.ip_address(net['ftp_ip'])
+            if ftp not in lan or not start <= ftp <= end or ftp in (lb, nfs):
+                raise ValueError()
+        elif cfg['profile'] == 'server' and 'ftp-camera' in apps:
+            raise Error('ftp-camera requires network.ftp_ip inside the LAN and loadbalancer_pool, distinct from ingress and NFS addresses')
     except (ValueError, TypeError):
-        raise Error("Provide valid NFS IP, LAN CIDR and an ordered loadbalancer_pool inside the LAN containing loadbalancer_ip and excluding the NFS server") from None
+        raise Error("Provide valid NFS IP, LAN CIDR and loadbalancer_pool containing loadbalancer_ip, excluding NFS; optional ftp_ip must be inside that pool and distinct from ingress/NFS") from None
     nfsroot = cfg["storage"]["nfs_root"]
     if not isinstance(nfsroot, str) or not nfsroot.startswith("/") or ".." in Path(nfsroot).parts or not re.fullmatch(r"/[A-Za-z0-9_./-]+", nfsroot):
         raise Error("nfs_root must be an absolute path without traversal or whitespace")
@@ -175,6 +193,10 @@ def config(path):
                 raise Error(f"{app} requires images.{key}; provide a publicly accessible compatible image")
     if cfg["profile"] == "server" and (domain.endswith(".test") or domain.endswith(".example") or domain == "example.com"):
         raise Error("server profile requires your own configured domain")
+    try:
+        hermes.validate(cfg)
+    except ValueError as exc:
+        raise Error(str(exc)) from None
     return cfg
 
 
@@ -195,7 +217,10 @@ def local_path(path):
 
 
 def required_secrets(cfg):
-    return {app: catalog()[app].get("secrets", {}) for app in cfg["applications"] if catalog()[app].get("secrets")}
+    requirements = {app: copy.deepcopy(catalog()[app]['secrets']) for app in cfg['applications'] if catalog()[app].get('secrets')}
+    for name, keys in hermes.extra_secrets(cfg).items():
+        requirements.setdefault('hermes-agent', {}).setdefault(name, []).extend(keys)
+    return requirements
 
 
 def secrets_env(key):
@@ -287,9 +312,12 @@ def configure(args):
                 value = input(f"tls.{key} [{cfg['tls'][key]}]: ").strip()
                 if value:
                     cfg["tls"][key] = value
-            for group, names in (("storage", ("nfs_server", "nfs_root", "class_name", "config_size")), ("network", ("lan_cidr", "loadbalancer_ip", "loadbalancer_pool"))):
+            for group, names in (("storage", ("nfs_server", "nfs_root", "class_name", "config_size")), ("network", ("lan_cidr", "loadbalancer_ip", "loadbalancer_pool", "ftp_ip"))):
                 for key in names:
-                    value = input(f"{group}.{key} [{cfg[group][key]}]: ").strip()
+                    # Optional fields may be absent in a valid hand-written site.
+                    # Leave an empty pool unset so validation derives it from the
+                    # load-balancer address entered immediately before this prompt.
+                    value = input(f"{group}.{key} [{cfg[group].get(key, '')}]: ").strip()
                     if value:
                         cfg[group][key] = value
     # Validate before replacing an existing file.
@@ -297,6 +325,8 @@ def configure(args):
         candidate = Path(tmp) / "site.yaml"
         candidate.write_text(dump(cfg))
         cfg = config(candidate)
+        if cfg['hermes']['repair_targets']:
+            documents(cfg)
     write_private(path, dump(cfg))
     data = secret_store(cfg, path, create=True)
     if not args.non_interactive and data:
@@ -305,11 +335,13 @@ def configure(args):
     print(f"Configured {path}; local credentials are never included in rendered manifests.")
 
 
-def documents(cfg):
+def documents(cfg, *, validate_targets=True):
     replacements = {"__DOMAIN__": cfg["domain"], "__NFS_SERVER__": cfg["storage"]["nfs_server"],
                     "__NFS_ROOT__": cfg["storage"]["nfs_root"], "__LAN_CIDR__": cfg["network"]["lan_cidr"],
                     "__LOADBALANCER_IP__": cfg["network"]["loadbalancer_ip"]}
     replacements["__LOADBALANCER_POOL__"] = cfg["network"].get("loadbalancer_pool", cfg["network"]["loadbalancer_ip"] + "-" + str(ipaddress.ip_address(cfg["network"]["loadbalancer_ip"]) + 9))
+    if 'ftp_ip' in cfg['network']:
+        replacements['__FTP_IP__'] = str(cfg['network']['ftp_ip'])
     for name, value in cfg["images"].items():
         replacements[name if name.startswith("__") else f"__{name}__"] = value
     result = []
@@ -387,7 +419,7 @@ def documents(cfg):
                 if obj.get("kind") == "PersistentVolume" and "nfs" in spec:
                     del spec["nfs"]
                     spec.pop("mountOptions", None)
-                    spec["hostPath"] = {"path": "/data/homelab-kit/" + obj["metadata"]["name"], "type": "DirectoryOrCreate"}
+                    spec["hostPath"] = {"path": "/data/kubernetes-homelab-kit/" + obj["metadata"]["name"], "type": "DirectoryOrCreate"}
                     spec["nodeAffinity"] = {"required": {"nodeSelectorTerms": [{"matchExpressions": [{"key": "kubernetes.io/hostname", "operator": "In", "values": [cfg["cluster_name"] + "-worker"]}]}]}}
                 if obj.get("kind") == "Service" and spec.get("type") == "LoadBalancer":
                     spec["type"] = "ClusterIP"
@@ -412,6 +444,10 @@ def documents(cfg):
             namespaces[name] = obj
         unique.append(obj)
     result = unique
+    try:
+        result = hermes.augment(cfg, result, ROOT, validate_targets=validate_targets)
+    except ValueError as exc:
+        raise Error(str(exc)) from None
     identities = [(x.get("apiVersion"), x.get("kind"), x.get("metadata", {}).get("namespace"), x.get("metadata", {}).get("name")) for x in result]
     if len(set(identities)) != len(identities):
         raise Error("Enabled applications render duplicate Kubernetes resource identities")
@@ -454,6 +490,17 @@ def pod_spec(obj):
     if kind in ("Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "ReplicationController", "Job"):
         return spec.get("template", {}).get("spec", {})
     return None
+
+
+def rollout_timeout(obj):
+    """Allow the declared startup window, then a bounded readiness grace period."""
+    windows = []
+    for container in (pod_spec(obj) or {}).get('containers', []):
+        probe = container.get('startupProbe')
+        if probe:
+            windows.append(probe.get('initialDelaySeconds', 0) + probe.get('failureThreshold', 3)
+                           * max(probe.get('periodSeconds', 10), probe.get('timeoutSeconds', 1)))
+    return max(300, max(windows, default=0) + 120)
 
 
 def prepare_nextcloud_data(obj):
@@ -508,7 +555,7 @@ def wait_certmanager(client, timeout=120):
     """Deployment readiness precedes webhook endpoint/CA propagation on fresh clusters."""
     probe = {"apiVersion": "cert-manager.io/v1", "kind": "Issuer", "metadata": {"name": "homelab-webhook-readiness", "namespace": "cert-manager"}, "spec": {"selfSigned": {}}}
     deadline = time.monotonic() + timeout
-    command = client + ["apply", "--server-side", "--field-manager=homelab-kit", "--dry-run=server", "--request-timeout=10s", "-f", "-"]
+    command = client + ["apply", "--server-side", "--field-manager=kubernetes-homelab-kit", "--dry-run=server", "--request-timeout=10s", "-f", "-"]
     while True:
         try:
             result = subprocess.run(command, input=dump(probe), capture_output=True, text=True, timeout=15)
@@ -550,7 +597,7 @@ def deploy(args):
             raise Error("kind profile kubeconfig context must match kind-<cluster_name>")
     def apply(objects):
         if objects:
-            run(client + ["apply", "--server-side", "--field-manager=homelab-kit", "-f", "-"], data=dump_all(objects, sort_keys=False))
+            run(client + ["apply", "--server-side", "--field-manager=kubernetes-homelab-kit", "-f", "-"], data=dump_all(objects, sort_keys=False))
     crds = [x for x in docs if x.get("kind") == "CustomResourceDefinition"]
     if crds:
         print(f"Preparing {len(crds)} Kubernetes resource definitions...", flush=True)
@@ -561,13 +608,15 @@ def deploy(args):
     for app, objects in required_secrets(cfg).items():
         for name in objects:
             obj = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": name, "namespace": catalog()[app]["namespace"]}, "type": "Opaque", "stringData": creds[app][name]}
+            if app == "hermes-agent" and name == "hermes-repair-credentials":
+                obj["metadata"]["labels"] = {"app.kubernetes.io/part-of": "kubernetes-homelab-kit", "app.kubernetes.io/component": "hermes-repair"}
             apply([obj])
     native_groups = {"v1", "apps", "batch", "autoscaling", "networking.k8s.io", "policy", "rbac.authorization.k8s.io", "admissionregistration.k8s.io", "storage.k8s.io", "scheduling.k8s.io", "coordination.k8s.io"}
     for app in cfg["applications"]:
         print(f"Deploying {app}...", flush=True)
         part_cfg = copy.deepcopy(cfg)
         part_cfg["applications"] = [app]
-        objects = [x for x in documents(part_cfg) if x.get("kind") not in ("CustomResourceDefinition", "Namespace")]
+        objects = [x for x in documents(part_cfg, validate_targets=False) if x.get("kind") not in ("CustomResourceDefinition", "Namespace")]
         native = [x for x in objects if x["apiVersion"].split("/")[0] in native_groups]
         custom = [x for x in objects if x not in native]
         apply(native)
@@ -576,7 +625,7 @@ def deploy(args):
             if kind in ("Deployment", "StatefulSet", "DaemonSet"):
                 meta = obj["metadata"]
                 print(f"  Waiting for {kind.lower()}/{meta['name']}...", flush=True)
-                run(client + ["rollout", "status", f"{kind.lower()}/{meta['name']}", "-n", meta.get("namespace", "default"), "--timeout=300s"])
+                run(client + ["rollout", "status", f"{kind.lower()}/{meta['name']}", "-n", meta.get("namespace", "default"), f"--timeout={rollout_timeout(obj)}s"])
         if app == "cert-manager" and custom:
             wait_certmanager(client)
         apply(custom)
