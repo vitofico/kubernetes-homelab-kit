@@ -1,0 +1,418 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: ad-alta-voce-dl
+  name: ad-alta-voce-dl
+---
+apiVersion: v1
+data:
+  DOWNLOADS_DIR: /audiobooks
+  POLLER_STATE_DIR: /state
+kind: ConfigMap
+metadata:
+  name: ad-alta-voce-dl-config
+  namespace: ad-alta-voce-dl
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ad-alta-voce-dl
+  namespace: ad-alta-voce-dl
+spec:
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+  selector:
+    app: ad-alta-voce-dl
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
+  name: ad-alta-voce-dl-lb
+  namespace: ad-alta-voce-dl
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 5000
+  selector:
+    app: ad-alta-voce-dl
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gluetun
+  namespace: ad-alta-voce-dl
+spec:
+  ports:
+  - name: http-proxy
+    port: 8888
+    targetPort: 8888
+  selector:
+    app: gluetun
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ad-alta-voce-audiobooks-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 500Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/ad-alta-voce-audiobooks-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ad-alta-voce-audiobooks
+  namespace: ad-alta-voce-dl
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: nfs
+  volumeName: ad-alta-voce-audiobooks-pv
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ad-alta-voce-dl-state
+  namespace: ad-alta-voce-dl
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ad-alta-voce-dl
+  name: ad-alta-voce-dl
+  namespace: ad-alta-voce-dl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ad-alta-voce-dl
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ad-alta-voce-dl
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: HTTP_PROXY
+          value: http://gluetun:8888
+        - name: HTTPS_PROXY
+          value: http://gluetun:8888
+        envFrom:
+        - configMapRef:
+            name: ad-alta-voce-dl-config
+        image: __IMAGE_AD_ALTA_VOCE_DL__
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: web
+        ports:
+        - containerPort: 5000
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /audiobooks
+          name: audiobooks
+        - mountPath: /state
+          name: state
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: audiobooks
+        persistentVolumeClaim:
+          claimName: ad-alta-voce-audiobooks
+      - name: state
+        persistentVolumeClaim:
+          claimName: ad-alta-voce-dl-state
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: gluetun
+  name: gluetun
+  namespace: ad-alta-voce-dl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gluetun
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: gluetun
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: HTTPPROXY
+          value: 'on'
+        - name: SERVER_COUNTRIES
+          value: Italy
+        - name: HEALTH_SERVER_ADDRESS
+          value: :9999
+        - name: FIREWALL_INPUT_PORTS
+          value: 8888,9999
+        envFrom:
+        - secretRef:
+            name: gluetun-vpn-credentials
+        image: qmcgaw/gluetun:latest@sha256:4af0c804003481e100180e1f8d4d5e9c48163fedc0f88d061881b615aef9d183
+        livenessProbe:
+          failureThreshold: 4
+          httpGet:
+            path: /
+            port: health
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: gluetun
+        ports:
+        - containerPort: 8888
+          name: http-proxy
+        - containerPort: 9999
+          name: health
+        readinessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          tcpSocket:
+            port: 8888
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+        volumeMounts: []
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes: []
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: ad-alta-voce-dl
+    app.kubernetes.io/component: poller
+  name: ad-alta-voce-dl-poller
+  namespace: ad-alta-voce-dl
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: ad-alta-voce-dl
+            app.kubernetes.io/component: poller
+        spec:
+          automountServiceAccountToken: false
+          containers:
+          - command:
+            - python
+            - -m
+            - rai.poller
+            env:
+            - name: HTTP_PROXY
+              value: http://gluetun:8888
+            - name: HTTPS_PROXY
+              value: http://gluetun:8888
+            envFrom:
+            - configMapRef:
+                name: ad-alta-voce-dl-config
+            image: __IMAGE_AD_ALTA_VOCE_DL__
+            name: poller
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+              requests:
+                cpu: 50m
+                memory: 128Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - mountPath: /audiobooks
+              name: audiobooks
+            - mountPath: /state
+              name: state
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+          - name: audiobooks
+            persistentVolumeClaim:
+              claimName: ad-alta-voce-audiobooks
+          - name: state
+            persistentVolumeClaim:
+              claimName: ad-alta-voce-dl-state
+  schedule: 0 18 * * *
+  successfulJobsHistoryLimit: 3
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ad-alta-voce-dl
+  namespace: ad-alta-voce-dl
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: adaltavoce.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: ad-alta-voce-dl
+            port:
+              number: 5000
+        path: /
+        pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-lan
+  namespace: ad-alta-voce-dl
+spec:
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: __LAN_CIDR__
+    ports:
+    - port: 5000
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: ad-alta-voce-dl
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-traefik
+  namespace: ad-alta-voce-dl
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 5000
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: ad-alta-voce-dl
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-proxy-from-app
+  namespace: ad-alta-voce-dl
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: ad-alta-voce-dl
+    ports:
+    - port: 8888
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: gluetun
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: ad-alta-voce-dl
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

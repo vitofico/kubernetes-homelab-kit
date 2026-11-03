@@ -1,0 +1,212 @@
+apps:
+  ad-alta-voce-dl:
+    path: applications/ad-alta-voce-dl
+    namespace: ad-alta-voce-dl
+    secrets:
+      gluetun-vpn-credentials:
+      - OPENVPN_PASSWORD
+      - OPENVPN_USER
+      - VPN_SERVICE_PROVIDER
+      - VPN_TYPE
+    kind_supported: false
+    reason: Requires an operator-supplied image; not enabled by default.
+    required_images:
+      __IMAGE_AD_ALTA_VOCE_DL__: Supply a publicly accessible compatible image for
+        ad-alta-voce-dl
+    depends_on:
+    - traefik
+    - cert-manager
+  argo:
+    path: applications/argo
+    namespace: argo
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on: []
+  audiobookshelf:
+    path: applications/audiobookshelf
+    namespace: audiobookshelf
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  authentik:
+    path: applications/authentik
+    namespace: authentik
+    secrets:
+      authentik-secrets:
+      - AUTHENTIK_BOOTSTRAP_PASSWORD
+      - AUTHENTIK_BOOTSTRAP_TOKEN
+      - AUTHENTIK_POSTGRESQL__PASSWORD
+      - AUTHENTIK_SECRET_KEY
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  calibre-web:
+    path: applications/calibre-web
+    namespace: calibre-web
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  cert-manager:
+    path: applications/cert-manager
+    namespace: cert-manager
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on: []
+  dns:
+    path: applications/dns
+    namespace: dns
+    secrets: {}
+    kind_supported: false
+    reason: Requires a non-overlapping LAN address pool and L2 network; not applicable
+      to Docker kind.
+    depends_on: []
+  ftp-camera:
+    path: applications/ftp-camera
+    namespace: ftp-camera
+    secrets:
+      ftp-camera-credentials:
+      - FTP_PASS
+      - FTP_USER
+    kind_supported: false
+    reason: Requires LAN UDP/TCP reachability; kind cannot reproduce physical camera
+      transfer.
+    depends_on: []
+  hermes-agent:
+    path: applications/hermes-agent
+    namespace: agent
+    secrets:
+      ai-provider-keys:
+      - anthropic
+      hermes-agent-secrets:
+      - HERMES_WEBHOOK_SECRET
+    kind_supported: false
+    reason: Requires an operator-supplied image; not enabled by default.
+    required_images:
+      __IMAGE_HERMES_AGENT__: Supply a publicly accessible compatible image for hermes-agent
+    depends_on: []
+  hermes-alert-router:
+    path: applications/hermes-alert-router
+    namespace: agent
+    secrets:
+      hermes-alert-router-shared:
+      - webhook-shared-secret
+    kind_supported: false
+    reason: Requires an operator-supplied image; not enabled by default.
+    required_images:
+      __IMAGE_HERMES_ALERT_ROUTER__: Supply a publicly accessible compatible image
+        for hermes-alert-router
+    depends_on:
+    - hermes-agent
+  immich-deduper:
+    path: applications/immich-deduper
+    namespace: immich
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+    - immich
+  immich:
+    path: applications/immich
+    namespace: immich
+    secrets:
+      immich-secrets:
+      - DB_PASSWORD
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  k8s-mediaserver:
+    path: applications/k8s-mediaserver
+    namespace: k8s-mediaserver
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  metallb:
+    path: applications/metallb
+    namespace: metallb-system
+    secrets: {}
+    kind_supported: false
+    reason: Requires a non-overlapping LAN address pool and L2 network; not applicable
+      to Docker kind.
+    depends_on: []
+  nextcloud:
+    path: applications/nextcloud
+    namespace: nextcloud
+    secrets:
+      nextcloud-credentials:
+      - db-password
+      - mariadb-root-password
+      - password
+      - redis-password
+      - smtp-host
+      - smtp-password
+      - smtp-username
+      - username
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager
+  ollama:
+    path: applications/ollama
+    namespace: ollama
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on: []
+  quire-server:
+    path: applications/quire-server
+    namespace: calibre-web
+    secrets:
+      opds-sync-secrets:
+      - postgres-password
+    kind_supported: false
+    reason: Requires an operator-supplied image; not enabled by default.
+    required_images:
+      __IMAGE_QUIRE_SERVER__: Supply a publicly accessible compatible image for quire-server
+    depends_on:
+    - calibre-web
+  traefik:
+    path: applications/traefik
+    namespace: traefik
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on: []
+  uptime-kuma:
+    path: applications/uptime-kuma
+    namespace: uptime-kuma
+    secrets: {}
+    kind_supported: true
+    reason: Rendered and available for opt-in integration testing; resource requirements
+      vary.
+    depends_on:
+    - traefik
+    - cert-manager

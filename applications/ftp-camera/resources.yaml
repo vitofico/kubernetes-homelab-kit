@@ -1,0 +1,391 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: ftp-camera
+  name: ftp-camera
+---
+apiVersion: v1
+data:
+  organize-photos.sh: "#!/bin/sh\n# Photo organizer script for FTP camera uploads\n#
+    Moves photos from /incoming to /highres/YYYY-MM-DD/ based on EXIF date\n#\n# Designed
+    to run as a Kubernetes CronJob every 5 minutes.\n# Skips files modified within
+    the last 2 minutes to avoid partial uploads.\n\nset -eu\n\nINCOMING_DIR=\"/incoming\"\nHIGHRES_DIR=\"/highres\"\nFAILED_DIR=\"${INCOMING_DIR}/.failed\"\nMIN_AGE_MINUTES=2\n\n#
+    Counters\nmoved=0\nskipped=0\nfailed=0\n\nlog() {\n  echo \"[$(date '+%Y-%m-%d
+    %H:%M:%S')] $1\"\n}\n\n# Create failed directory if needed\nmkdir -p \"${FAILED_DIR}\"\n\n#
+    Find image/video files older than MIN_AGE_MINUTES (avoids partial uploads)\n#
+    Search recursively \u2014 camera may create subdirectories\n# Use a temp file
+    instead of pipe so the while loop runs in the current shell\n# (pipe would create
+    a subshell, losing counter increments)\nFILELIST=$(mktemp)\nfind \"${INCOMING_DIR}\"
+    -type f \\\n  \\( -iname '*.arw' -o -iname '*.jpg' -o -iname '*.jpeg' \\\n     -o
+    -iname '*.heic' -o -iname '*.heif' -o -iname '*.png' \\\n     -o -iname '*.mp4'
+    -o -iname '*.mov' -o -iname '*.avi' \\) \\\n  -mmin \"+${MIN_AGE_MINUTES}\" \\\n
+    \ -not -path \"${FAILED_DIR}/*\" > \"${FILELIST}\" 2>/dev/null || true\n\nwhile
+    IFS= read -r file; do\n\n  filename=$(basename \"${file}\")\n\n  # Extract EXIF
+    DateTimeOriginal \u2192 YYYY-MM-DD\n  date_str=\"\"\n  if command -v exiftool
+    >/dev/null 2>&1; then\n    date_str=$(exiftool -DateTimeOriginal -s3 -d \"%Y-%m-%d\"
+    \"${file}\" 2>/dev/null || true)\n  fi\n\n  # Fallback: use file modification
+    time\n  if [ -z \"${date_str}\" ]; then\n    date_str=$(date -r \"${file}\" \"+%Y-%m-%d\"
+    2>/dev/null || \\\n               stat -c '%y' \"${file}\" 2>/dev/null | cut -d'
+    ' -f1 || true)\n  fi\n\n  # If we still can't determine a date, move to failed\n
+    \ if [ -z \"${date_str}\" ]; then\n    log \"FAIL: Cannot determine date for ${filename},
+    moving to .failed/\"\n    mv \"${file}\" \"${FAILED_DIR}/${filename}\"\n    failed=$((failed
+    + 1))\n    continue\n  fi\n\n  # Build target directory\n  target_dir=\"${HIGHRES_DIR}/${date_str}\"\n
+    \ mkdir -p \"${target_dir}\"\n\n  # Handle duplicate filenames\n  target_path=\"${target_dir}/${filename}\"\n
+    \ if [ -e \"${target_path}\" ]; then\n    # Check if same file (same size)\n    src_size=$(stat
+    -c '%s' \"${file}\" 2>/dev/null || stat -f '%z' \"${file}\" 2>/dev/null)\n    dst_size=$(stat
+    -c '%s' \"${target_path}\" 2>/dev/null || stat -f '%z' \"${target_path}\" 2>/dev/null)\n
+    \   if [ \"${src_size}\" = \"${dst_size}\" ]; then\n      log \"SKIP: ${filename}
+    already exists in ${date_str}/ (same size), removing source\"\n      rm \"${file}\"\n
+    \     skipped=$((skipped + 1))\n      continue\n    fi\n\n    # Different file
+    with same name \u2014 add suffix\n    base=\"${filename%.*}\"\n    ext=\"${filename##*.}\"\n
+    \   counter=1\n    while [ -e \"${target_dir}/${base}_${counter}.${ext}\" ]; do\n
+    \     counter=$((counter + 1))\n    done\n    target_path=\"${target_dir}/${base}_${counter}.${ext}\"\n
+    \   log \"RENAME: ${filename} \u2192 ${base}_${counter}.${ext} (name collision)\"\n
+    \ fi\n\n  # Move file (cross-filesystem mv = copy + delete, new file gets our
+    UID)\n  if mv \"${file}\" \"${target_path}\"; then\n    log \"MOVED: ${filename}
+    \u2192 ${date_str}/\"\n    moved=$((moved + 1))\n  else\n    log \"FAIL: Could
+    not move ${filename}\"\n    mv \"${file}\" \"${FAILED_DIR}/${filename}\" 2>/dev/null
+    || true\n    failed=$((failed + 1))\n  fi\ndone < \"${FILELIST}\"\nrm -f \"${FILELIST}\"\n\n#
+    Clean up empty directories left by camera (ignore .failed and incoming root)\nfind
+    \"${INCOMING_DIR}\" -mindepth 1 -type d -empty \\\n  -not -name '.failed' -delete
+    2>/dev/null || true\n\nlog \"Done: moved=${moved} skipped=${skipped} failed=${failed}\"\n"
+kind: ConfigMap
+metadata:
+  name: organize-photos-script
+  namespace: ftp-camera
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
+  labels:
+    app: ftp-camera
+  name: ftp-camera
+  namespace: ftp-camera
+spec:
+  externalTrafficPolicy: Local
+  ports:
+  - name: ftp
+    port: 21
+    protocol: TCP
+    targetPort: ftp
+  - name: pasv-0
+    port: 40000
+    protocol: TCP
+    targetPort: pasv-0
+  - name: pasv-1
+    port: 40001
+    protocol: TCP
+    targetPort: pasv-1
+  - name: pasv-2
+    port: 40002
+    protocol: TCP
+    targetPort: pasv-2
+  - name: pasv-3
+    port: 40003
+    protocol: TCP
+    targetPort: pasv-3
+  - name: pasv-4
+    port: 40004
+    protocol: TCP
+    targetPort: pasv-4
+  - name: pasv-5
+    port: 40005
+    protocol: TCP
+    targetPort: pasv-5
+  - name: pasv-6
+    port: 40006
+    protocol: TCP
+    targetPort: pasv-6
+  - name: pasv-7
+    port: 40007
+    protocol: TCP
+    targetPort: pasv-7
+  - name: pasv-8
+    port: 40008
+    protocol: TCP
+    targetPort: pasv-8
+  - name: pasv-9
+    port: 40009
+    protocol: TCP
+    targetPort: pasv-9
+  - name: pasv-10
+    port: 40010
+    protocol: TCP
+    targetPort: pasv-10
+  selector:
+    app: ftp-camera
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ftp-camera-highres-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 500Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/ftp-camera-highres-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ftp-camera-incoming-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 100Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/ftp-camera-incoming-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ftp-camera-highres
+  namespace: ftp-camera
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: nfs
+  volumeName: ftp-camera-highres-pv
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ftp-camera-incoming-pvc
+  namespace: ftp-camera
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ftp-camera
+  name: ftp-camera
+  namespace: ftp-camera
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ftp-camera
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ftp-camera
+    spec:
+      containers:
+      - env:
+        - name: FTP_USER
+          valueFrom:
+            secretKeyRef:
+              key: FTP_USER
+              name: ftp-camera-credentials
+        - name: FTP_PASS
+          valueFrom:
+            secretKeyRef:
+              key: FTP_PASS
+              name: ftp-camera-credentials
+        - name: PASV_ADDRESS
+          value: __NFS_SERVER__
+        - name: PASV_MIN_PORT
+          value: '40000'
+        - name: PASV_MAX_PORT
+          value: '40010'
+        - name: LOG_STDOUT
+          value: 'YES'
+        - name: LOCAL_UMASK
+          value: '022'
+        image: fauria/vsftpd:latest
+        name: vsftpd
+        ports:
+        - containerPort: 21
+          name: ftp
+          protocol: TCP
+        - containerPort: 40000
+          name: pasv-0
+          protocol: TCP
+        - containerPort: 40001
+          name: pasv-1
+          protocol: TCP
+        - containerPort: 40002
+          name: pasv-2
+          protocol: TCP
+        - containerPort: 40003
+          name: pasv-3
+          protocol: TCP
+        - containerPort: 40004
+          name: pasv-4
+          protocol: TCP
+        - containerPort: 40005
+          name: pasv-5
+          protocol: TCP
+        - containerPort: 40006
+          name: pasv-6
+          protocol: TCP
+        - containerPort: 40007
+          name: pasv-7
+          protocol: TCP
+        - containerPort: 40008
+          name: pasv-8
+          protocol: TCP
+        - containerPort: 40009
+          name: pasv-9
+          protocol: TCP
+        - containerPort: 40010
+          name: pasv-10
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /home/operator
+          name: ftp-incoming
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - mkdir -p /home/operator/cameraftp
+        image: busybox:1.38
+        name: init-home
+        volumeMounts:
+        - mountPath: /home/operator
+          name: ftp-incoming
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: ftp-incoming
+        persistentVolumeClaim:
+          claimName: ftp-camera-incoming-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: ftp-camera
+    app.kubernetes.io/component: photo-organizer
+  name: photo-organizer
+  namespace: ftp-camera
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: ftp-camera
+            app.kubernetes.io/component: photo-organizer
+        spec:
+          containers:
+          - command:
+            - /bin/sh
+            - -c
+            - 'apk add --no-cache --quiet exiftool findutils su-exec && \
+
+              exec su-exec 33:33 /scripts/organize-photos.sh
+
+              '
+            image: alpine:3.24
+            name: organizer
+            resources:
+              limits:
+                cpu: 200m
+                memory: 256Mi
+              requests:
+                cpu: 50m
+                memory: 64Mi
+            volumeMounts:
+            - mountPath: /incoming
+              name: ftp-incoming
+            - mountPath: /highres
+              name: highres-photos
+            - mountPath: /scripts
+              name: organizer-script
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 33
+          volumes:
+          - name: ftp-incoming
+            persistentVolumeClaim:
+              claimName: ftp-camera-incoming-pvc
+          - name: highres-photos
+            persistentVolumeClaim:
+              claimName: ftp-camera-highres
+          - configMap:
+              defaultMode: 493
+              name: organize-photos-script
+            name: organizer-script
+  schedule: 0 * * * *
+  successfulJobsHistoryLimit: 3
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ftp-from-lan
+  namespace: ftp-camera
+spec:
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: __LAN_CIDR__
+    ports:
+    - port: 21
+      protocol: TCP
+    - endPort: 40010
+      port: 40000
+      protocol: TCP
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: ftp-camera
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

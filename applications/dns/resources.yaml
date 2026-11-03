@@ -1,0 +1,29 @@
+apiVersion: v1
+data:
+  homelab.server: "__DOMAIN__:53 {\n  hosts {\n    __LOADBALANCER_IP__ __DOMAIN__\n
+    \   fallthrough\n  }\n}\n"
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
+  name: coredns-external
+  namespace: kube-system
+spec:
+  ports:
+  - name: dns-udp
+    port: 53
+    protocol: UDP
+    targetPort: 53
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+    targetPort: 53
+  selector:
+    k8s-app: kube-dns
+  type: LoadBalancer

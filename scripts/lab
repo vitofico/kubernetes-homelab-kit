@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -n "${PYTHON:-}" ]]; then
+  exec "$PYTHON" "$ROOT/scripts/lab.py" "$@"
+elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+  exec "$ROOT/.venv/bin/python" "$ROOT/scripts/lab.py" "$@"
+else
+  exec python3 "$ROOT/scripts/lab.py" "$@"
+fi

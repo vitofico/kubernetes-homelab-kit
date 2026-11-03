@@ -1,0 +1,284 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: agent
+  name: agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hermes-agent
+  namespace: agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hermes-agent
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - services
+  - persistentvolumeclaims
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hermes-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hermes-agent
+subjects:
+- kind: ServiceAccount
+  name: hermes-agent
+  namespace: agent
+---
+apiVersion: v1
+data:
+  config.yaml: "model:\n  provider: anthropic\n  default: claude-sonnet-4-6\nagent:\n
+    \ max_turns: 20\nplatforms: {}\n"
+  SOUL.md: 'You are a helpful assistant. Follow the operator instructions and protect
+    private data.
+
+    '
+kind: ConfigMap
+metadata:
+  name: hermes-agent-config
+  namespace: agent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hermes-agent
+  name: hermes-agent
+  namespace: agent
+spec:
+  ports:
+  - name: webhook
+    port: 8644
+    targetPort: webhook
+  selector:
+    app: hermes-agent
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hermes-agent-data
+  namespace: agent
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hermes-agent
+  name: hermes-agent
+  namespace: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hermes-agent
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: hermes-agent
+    spec:
+      containers:
+      - env:
+        - name: PATH
+          value: /opt/data/media-bin:/opt/data/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: anthropic
+              name: ai-provider-keys
+        image: __IMAGE_HERMES_AGENT__
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8644
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: hermes
+        ports:
+        - containerPort: 8644
+          name: webhook
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8644
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsGroup: 10000
+          runAsNonRoot: true
+          runAsUser: 10000
+        volumeMounts:
+        - mountPath: /opt/data
+          name: hermes-data
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - mkdir -p /opt/data/.hermes; cp /config-ro/config.yaml /opt/data/.hermes/config.yaml;
+          cp /config-ro/SOUL.md /opt/data/.hermes/SOUL.md
+        image: busybox:1.38
+        name: copy-config
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /opt/data
+          name: hermes-data
+        - mountPath: /config-ro
+          name: hermes-config
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: hermes-agent
+      volumes:
+      - name: hermes-data
+        persistentVolumeClaim:
+          claimName: hermes-agent-data
+      - configMap:
+          name: hermes-agent-config
+        name: hermes-config
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns
+  namespace: agent
+spec:
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+  podSelector: {}
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-https
+  namespace: agent
+spec:
+  egress:
+  - ports:
+    - port: 443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - __LAN_CIDR__
+        - __LAN_CIDR__
+  podSelector:
+    matchLabels:
+      app: hermes-agent
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-mediaserver
+  namespace: agent
+spec:
+  egress:
+  - ports:
+    - port: 7878
+      protocol: TCP
+    - port: 8989
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: k8s-mediaserver
+  podSelector:
+    matchLabels:
+      app: hermes-agent
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-router
+  namespace: agent
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: hermes-alert-router
+    ports:
+    - port: 8644
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: hermes-agent
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: agent
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

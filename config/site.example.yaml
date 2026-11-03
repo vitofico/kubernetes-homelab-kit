@@ -1,0 +1,21 @@
+profile: kind
+cluster_name: homelab-kit-test
+domain: lab.example.test
+tls:
+  mode: selfsigned
+  email: ''
+applications:
+  - traefik
+  - cert-manager
+  - audiobookshelf
+  - uptime-kuma
+storage:
+  class_name: microk8s-hostpath
+  config_size: 10Gi
+  nfs_server: 192.0.2.20
+  nfs_root: /exports/homelab
+network:
+  lan_cidr: 192.0.2.0/24
+  loadbalancer_ip: 192.0.2.10
+  loadbalancer_pool: 192.0.2.10-192.0.2.19
+images: {}

@@ -1,0 +1,659 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: immich
+  name: immich
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: immich-machine-learning
+  name: immich-machine-learning
+  namespace: immich
+spec:
+  ports:
+  - name: http
+    port: 3003
+    targetPort: 3003
+  selector:
+    app: immich-machine-learning
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: immich-postgresql
+  name: immich-postgresql
+  namespace: immich
+spec:
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: 5432
+  selector:
+    app: immich-postgresql
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: immich-redis
+  name: immich-redis
+  namespace: immich
+spec:
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+  selector:
+    app: immich-redis
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: immich-server
+  name: immich-server
+  namespace: immich
+spec:
+  ports:
+  - name: http
+    port: 2283
+    targetPort: http
+  selector:
+    app: immich-server
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-highres-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 500Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/immich-highres-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-upload-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 1Ti
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/immich-upload-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-highres
+  namespace: immich
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: nfs
+  volumeName: immich-highres-pv
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-ml-cache
+  namespace: immich
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-postgresql-data
+  namespace: immich
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-redis-data
+  namespace: immich
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-upload
+  namespace: immich
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: nfs
+  volumeName: immich-upload-pv
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: immich-machine-learning
+  name: immich-machine-learning
+  namespace: immich
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-machine-learning
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: immich-machine-learning
+    spec:
+      containers:
+      - image: ghcr.io/immich-app/immich-machine-learning:v3.3.5@sha256:5b28c9352c8374b8a1ed96fbdd8d6755fea6e43510ec43fdf6538aa02ea40f56
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ping
+            port: 3003
+          initialDelaySeconds: 120
+          periodSeconds: 30
+        name: machine-learning
+        ports:
+        - containerPort: 3003
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 3003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+          requests:
+            cpu: 50m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /cache
+          name: ml-cache
+        env: []
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: ml-cache
+        persistentVolumeClaim:
+          claimName: immich-ml-cache
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: immich-postgresql
+  name: immich-postgresql
+  namespace: immich
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-postgresql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: immich-postgresql
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: immich
+        - name: POSTGRES_USER
+          value: immich
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: DB_PASSWORD
+              name: immich-secrets
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_INITDB_ARGS
+          value: --data-checksums
+        image: ghcr.io/immich-app/postgres:16-vectorchord0.4.3
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - immich
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        name: postgresql
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - immich
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1536Mi
+          requests:
+            cpu: 50m
+            memory: 768Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgresql-data
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: postgresql-data
+        persistentVolumeClaim:
+          claimName: immich-postgresql-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: immich-redis
+  name: immich-redis
+  namespace: immich
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: immich-redis
+    spec:
+      containers:
+      - command:
+        - redis-server
+        - --save
+        - '60'
+        - '1'
+        - --loglevel
+        - warning
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        name: redis
+        ports:
+        - containerPort: 6379
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+        env: []
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: immich-redis-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: immich-server
+  name: immich-server
+  namespace: immich
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: immich-server
+    spec:
+      containers:
+      - env:
+        - name: DB_HOSTNAME
+          value: immich-postgresql
+        - name: DB_PORT
+          value: '5432'
+        - name: DB_DATABASE_NAME
+          value: immich
+        - name: DB_USERNAME
+          value: immich
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: DB_PASSWORD
+              name: immich-secrets
+        - name: REDIS_HOSTNAME
+          value: immich-redis
+        - name: REDIS_PORT
+          value: '6379'
+        - name: IMMICH_MACHINE_LEARNING_URL
+          value: http://immich-machine-learning:3003
+        image: ghcr.io/immich-app/immich-server:v3.3.5@sha256:485d546a2e31d6a8b4db8423fcba5c109de8c218d93410af115fd1ccfc4352a6
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/server/ping
+            port: 2283
+          periodSeconds: 30
+        name: immich-server
+        ports:
+        - containerPort: 2283
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /api/server/ping
+            port: 2283
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+          requests:
+            cpu: 50m
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          failureThreshold: 90
+          httpGet:
+            path: /api/server/ping
+            port: 2283
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        volumeMounts:
+        - mountPath: /usr/src/app/upload
+          name: immich-upload
+        - mountPath: /external/HighResPhotos
+          name: nextcloud-highres
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - "until pg_isready -h immich-postgresql -U immich; do\n  echo \"Waiting for
+          PostgreSQL...\"\n  sleep 2\ndone\n"
+        image: postgres:16-alpine@sha256:4327b9fd295502f326f44153a1045a7170ddbfffed1c3829798328556cfd09e2
+        name: wait-for-db
+        volumeMounts: []
+        env: []
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: immich-upload
+        persistentVolumeClaim:
+          claimName: immich-upload
+      - name: nextcloud-highres
+        persistentVolumeClaim:
+          claimName: immich-highres
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: local-selfsigned
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+  name: immich
+  namespace: immich
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: immich.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: immich-server
+            port:
+              number: 2283
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - immich.__DOMAIN__
+    secretName: immich-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+  namespace: immich
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 8089
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: 'true'
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-uptime-kuma
+  namespace: immich
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: uptime-kuma
+    ports:
+    - port: 3003
+      protocol: TCP
+    - port: 5432
+      protocol: TCP
+    - port: 6379
+      protocol: TCP
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - immich-machine-learning
+      - immich-postgresql
+      - immich-redis
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-immich-internal
+  namespace: immich
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: immich-server
+    ports:
+    - port: 5432
+      protocol: TCP
+    - port: 6379
+      protocol: TCP
+    - port: 3003
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: immich-deduper
+    ports:
+    - port: 6333
+      protocol: TCP
+    - port: 6334
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: immich-deduper
+    ports:
+    - port: 5432
+      protocol: TCP
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - immich-postgresql
+      - immich-redis
+      - immich-machine-learning
+      - immich-deduper-qdrant
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-web
+  namespace: immich
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 2283
+      protocol: TCP
+    - port: 8086
+      protocol: TCP
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - immich-server
+      - immich-deduper
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: immich
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

@@ -1,0 +1,237 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: calibre-web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-opds-sync
+  namespace: calibre-web
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres-opds-sync
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quire-server
+  namespace: calibre-web
+spec:
+  ports:
+  - port: 80
+    targetPort: 8000
+  selector:
+    app: quire-server
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opds-sync-postgres
+  namespace: calibre-web
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quire-server
+  namespace: calibre-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quire-server
+  template:
+    metadata:
+      labels:
+        app: quire-server
+    spec:
+      containers:
+      - env:
+        - name: QUIRE_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: opds-sync-secrets
+              key: postgres-password
+        - name: QUIRE_SERVER_DATABASE_URL
+          value: postgresql+asyncpg://opds_sync:$(QUIRE_DATABASE_PASSWORD)@postgres-opds-sync:5432/opds_sync
+        - name: QUIRE_SERVER_CWA_BASE_URL
+          value: http://calibre-web.calibre-web.svc.cluster.local:8083
+        - name: QUIRE_SERVER_LOG_LEVEL
+          value: INFO
+        - name: QUIRE_SERVER_AI_ENABLED
+          value: 'false'
+        - name: QUIRE_SERVER_AI_BASE_URL
+          value: https://api.anthropic.com/v1
+        - name: QUIRE_SERVER_AI_MODEL
+          value: claude-haiku-5-5
+        - name: QUIRE_SERVER_AI_TEMPERATURE
+          value: none
+        - name: QUIRE_SERVER_AI_SOURCES
+          value: wikipedia,openlibrary
+        - name: QUIRE_SERVER_AI_RATE_PER_MIN
+          value: '10'
+        - name: QUIRE_SERVER_AI_DAILY_BUDGET
+          value: '200'
+        - name: QUIRE_SERVER_AI_REGEN_DAILY_LIMIT
+          value: '3'
+        image: __IMAGE_QUIRE_SERVER__
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        name: quire-server
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts: []
+      initContainers:
+      - command:
+        - python
+        - /app/scripts/migrate.py
+        env:
+        - name: QUIRE_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: opds-sync-secrets
+              key: postgres-password
+        - name: QUIRE_SERVER_DATABASE_URL
+          value: postgresql+asyncpg://opds_sync:$(QUIRE_DATABASE_PASSWORD)@postgres-opds-sync:5432/opds_sync
+        image: __IMAGE_QUIRE_SERVER__
+        name: migrate
+        volumeMounts: []
+      volumes: []
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-opds-sync
+  namespace: calibre-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-opds-sync
+  serviceName: postgres-opds-sync
+  template:
+    metadata:
+      labels:
+        app: postgres-opds-sync
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: opds_sync
+        - name: POSTGRES_USER
+          value: opds_sync
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-password
+              name: opds-sync-secrets
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        image: postgres:16-alpine
+        name: postgres
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -d
+            - opds_sync
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: opds-sync-postgres
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-opds-sync-allow
+  namespace: calibre-web
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: quire-server
+    ports:
+    - port: 5432
+  podSelector:
+    matchLabels:
+      app: postgres-opds-sync
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quire-server-allow
+  namespace: calibre-web
+spec:
+  egress:
+  - ports:
+    - port: 5432
+    to:
+    - podSelector:
+        matchLabels:
+          app: postgres-opds-sync
+  - ports:
+    - port: 8083
+    to:
+    - podSelector:
+        matchLabels:
+          app: calibre-web
+  - ports:
+    - port: 443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - __LAN_CIDR__
+        - __LAN_CIDR__
+  - ports:
+    - port: 53
+      protocol: UDP
+    to: []
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 8000
+  podSelector:
+    matchLabels:
+      app: quire-server
+  policyTypes:
+  - Ingress
+  - Egress

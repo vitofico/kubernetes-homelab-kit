@@ -1,0 +1,257 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: audiobookshelf
+  name: audiobookshelf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: audiobookshelf
+  name: audiobookshelf
+  namespace: audiobookshelf
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    app: audiobookshelf
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-audiobooks-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 500Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/audiobookshelf-audiobooks-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-mediaserver-pv
+spec:
+  accessModes:
+  - ReadOnlyMany
+  capacity:
+    storage: 1Ti
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  - ro
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/audiobookshelf-mediaserver-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-audiobooks
+  namespace: audiobookshelf
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: nfs
+  volumeName: audiobookshelf-audiobooks-pv
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-config
+  namespace: audiobookshelf
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-mediaserver
+  namespace: audiobookshelf
+spec:
+  accessModes:
+  - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: nfs
+  volumeName: audiobookshelf-mediaserver-pv
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-metadata
+  namespace: audiobookshelf
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: audiobookshelf
+  name: audiobookshelf
+  namespace: audiobookshelf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audiobookshelf
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: audiobookshelf
+    spec:
+      containers:
+      - env:
+        - name: TZ
+          value: UTC
+        - name: AUDIOBOOKSHELF_UID
+          value: '1000'
+        - name: AUDIOBOOKSHELF_GID
+          value: '1000'
+        image: ghcr.io/advplyr/audiobookshelf:2.37.2@sha256:b897c33f05972fb1bf484f7487bc878fa91ec8691335c1db6e2929c3a7658efa
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthcheck
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: audiobookshelf
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 25m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: config
+        - mountPath: /metadata
+          name: metadata
+        - mountPath: /audiobooks
+          name: audiobooks
+        - mountPath: /podcasts
+          name: mediaserver-media
+          subPath: media/podcasts
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: audiobookshelf-config
+      - name: metadata
+        persistentVolumeClaim:
+          claimName: audiobookshelf-metadata
+      - name: audiobooks
+        persistentVolumeClaim:
+          claimName: audiobookshelf-audiobooks
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: audiobookshelf-mediaserver
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: local-selfsigned
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+  name: audiobookshelf
+  namespace: audiobookshelf
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: audiobooks.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: audiobookshelf
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - audiobooks.__DOMAIN__
+    secretName: audiobookshelf-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-traefik
+  namespace: audiobookshelf
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: audiobookshelf
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

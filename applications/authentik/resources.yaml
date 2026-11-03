@@ -1,0 +1,521 @@
+# Authentik 2026.8.5 server/worker startup uses the upstream migration handler
+# and PostgreSQL advisory lock. Standalone ak migrate must not run alongside it.
+# https://github.com/goauthentik/authentik/blob/version/2026.8.5/lifecycle/migrate.py
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/name: authentik
+    name: authentik
+  name: authentik
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: authentik-postgresql
+  name: authentik-postgresql
+  namespace: authentik
+spec:
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+  selector:
+    app: authentik-postgresql
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: authentik-server
+  name: authentik-server
+  namespace: authentik
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  - name: https
+    port: 443
+    targetPort: https
+  selector:
+    app: authentik-server
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: authentik
+  name: authentik-media
+  namespace: authentik
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: authentik-postgresql
+  name: authentik-postgresql
+  namespace: authentik
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: authentik-postgresql
+  name: authentik-postgresql
+  namespace: authentik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-postgresql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: authentik-postgresql
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_USER
+          value: authentik
+        - name: POSTGRES_DB
+          value: authentik
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_POSTGRESQL__PASSWORD
+              name: authentik-secrets
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U authentik
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        name: postgresql
+        ports:
+        - containerPort: 5432
+          name: postgresql
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U authentik
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: data
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: authentik-postgresql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: authentik-server
+  name: authentik-server
+  namespace: authentik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: authentik-server
+        app.kubernetes.io/component: server
+        app.kubernetes.io/name: authentik
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - ak
+        - server
+        env:
+        - name: AUTHENTIK_WEB__BASE_URL
+          value: https://auth.__DOMAIN__
+        - name: AUTHENTIK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_SECRET_KEY
+              name: authentik-secrets
+        - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_BOOTSTRAP_PASSWORD
+              name: authentik-secrets
+        - name: AUTHENTIK_BOOTSTRAP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_BOOTSTRAP_TOKEN
+              name: authentik-secrets
+        - name: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-postgresql
+        - name: AUTHENTIK_POSTGRESQL__PORT
+          value: '5432'
+        - name: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__USER
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_POSTGRESQL__PASSWORD
+              name: authentik-secrets
+        - name: AUTHENTIK_ERROR_REPORTING__ENABLED
+          value: 'false'
+        - name: AUTHENTIK_DISABLE_UPDATE_CHECK
+          value: 'false'
+        - name: AUTHENTIK_DISABLE_STARTUP_ANALYTICS
+          value: 'true'
+        - name: AUTHENTIK_LOG_LEVEL
+          value: info
+        image: ghcr.io/goauthentik/server:2026.8.5@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /-/health/live/
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: authentik
+        ports:
+        - containerPort: 9000
+          name: http
+          protocol: TCP
+        - containerPort: 9443
+          name: https
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /-/health/ready/
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 50m
+            memory: 768Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /media
+          name: media
+        startupProbe:
+          httpGet:
+            path: /-/health/live/
+            port: http
+          failureThreshold: 120
+          periodSeconds: 5
+          timeoutSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: authentik-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: authentik-worker
+  name: authentik-worker
+  namespace: authentik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: authentik-worker
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - ak
+        - worker
+        env:
+        - name: AUTHENTIK_WEB__BASE_URL
+          value: https://auth.__DOMAIN__
+        - name: AUTHENTIK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_SECRET_KEY
+              name: authentik-secrets
+        - name: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-postgresql
+        - name: AUTHENTIK_POSTGRESQL__PORT
+          value: '5432'
+        - name: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__USER
+          value: authentik
+        - name: AUTHENTIK_POSTGRESQL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_POSTGRESQL__PASSWORD
+              name: authentik-secrets
+        - name: AUTHENTIK_ERROR_REPORTING__ENABLED
+          value: 'false'
+        - name: AUTHENTIK_DISABLE_UPDATE_CHECK
+          value: 'false'
+        - name: AUTHENTIK_DISABLE_STARTUP_ANALYTICS
+          value: 'true'
+        - name: AUTHENTIK_LOG_LEVEL
+          value: info
+        - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_BOOTSTRAP_PASSWORD
+              name: authentik-secrets
+        - name: AUTHENTIK_BOOTSTRAP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: AUTHENTIK_BOOTSTRAP_TOKEN
+              name: authentik-secrets
+        image: ghcr.io/goauthentik/server:2026.8.5@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - ak
+            - healthcheck
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 3
+        name: authentik-worker
+        readinessProbe:
+          exec:
+            command:
+            - ak
+            - healthcheck
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 500m
+            memory: 768Mi
+          requests:
+            cpu: 50m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /media
+          name: media
+        - mountPath: /certs
+          name: certs
+        - mountPath: /templates
+          name: templates
+        startupProbe:
+          exec:
+            command:
+            - ak
+            - healthcheck
+          failureThreshold: 120
+          periodSeconds: 5
+          timeoutSeconds: 10
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: authentik-media
+      - emptyDir: {}
+        name: certs
+      - emptyDir: {}
+        name: templates
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: local-selfsigned
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+  name: authentik
+  namespace: authentik
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: auth.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: authentik-server
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - auth.__DOMAIN__
+    secretName: authentik-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+  namespace: authentik
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 8089
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: 'true'
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-authentik-to-databases
+  namespace: authentik
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - authentik-server
+          - authentik-worker
+    ports:
+    - port: 5432
+      protocol: TCP
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - authentik-postgresql
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-server
+  namespace: authentik
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 9000
+      protocol: TCP
+    - port: 9443
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: authentik-server
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: authentik
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress

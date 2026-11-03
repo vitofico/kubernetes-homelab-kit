@@ -1,0 +1,991 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-mediaserver
+---
+apiVersion: v1
+data:
+  PGID: '1000'
+  PUID: '1000'
+kind: ConfigMap
+metadata:
+  name: jellyfin-config
+  namespace: k8s-mediaserver
+---
+apiVersion: v1
+data:
+  PGID: '1000'
+  PUID: '1000'
+kind: ConfigMap
+metadata:
+  name: prowlarr-config
+  namespace: k8s-mediaserver
+---
+apiVersion: v1
+data:
+  PGID: '1000'
+  PUID: '1000'
+kind: ConfigMap
+metadata:
+  name: radarr-config
+  namespace: k8s-mediaserver
+---
+apiVersion: v1
+data:
+  PGID: '1000'
+  PUID: '1000'
+kind: ConfigMap
+metadata:
+  name: sonarr-config
+  namespace: k8s-mediaserver
+---
+apiVersion: v1
+data:
+  PGID: '1000'
+  PUID: '1000'
+  TRANSMISSION_DOWNLOAD_DIR: /downloads/transmission/complete
+  TRANSMISSION_INCOMPLETE_DIR: /downloads/transmission/incomplete
+  TRANSMISSION_INCOMPLETE_DIR_ENABLED: 'true'
+kind: ConfigMap
+metadata:
+  name: transmission-config
+  namespace: k8s-mediaserver
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/name: k8s-mediaserver
+  name: flaresolverr
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: solverr-port
+    port: 8191
+    protocol: TCP
+    targetPort: 8191
+  selector:
+    app: flaresolverr
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: jellyfin
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: jellyfin-port
+    port: 8096
+    protocol: TCP
+    targetPort: 8096
+  selector:
+    app: jellyfin
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: prowlarr
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: prowlarr-port
+    port: 9696
+    protocol: TCP
+    targetPort: 9696
+  selector:
+    app: prowlarr
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: radarr
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: radarr-port
+    port: 7878
+    protocol: TCP
+    targetPort: 7878
+  selector:
+    app: radarr
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: radarr-lb
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: radarr-port
+    port: 7878
+    protocol: TCP
+    targetPort: 7878
+  selector:
+    app: radarr
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: sonarr
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: sonarr-port
+    port: 8989
+    protocol: TCP
+    targetPort: 8989
+  selector:
+    app: sonarr
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: __NFS_SERVER__
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: sonarr-lb
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: sonarr-port
+    port: 8989
+    protocol: TCP
+    targetPort: 8989
+  selector:
+    app: sonarr
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: transmission
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: trans-port
+    port: 9091
+    protocol: TCP
+    targetPort: 9091
+  selector:
+    app: transmission
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: transmission-peer-tcp
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: trans-peer-tcp
+    port: 51413
+    protocol: TCP
+    targetPort: 51413
+  selector:
+    app: transmission
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: transmission-peer-udp
+  namespace: k8s-mediaserver
+spec:
+  ports:
+  - name: trans-peer-udp
+    port: 51413
+    protocol: UDP
+    targetPort: 51413
+  selector:
+    app: transmission
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mediaserver-media-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 1Ti
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/mediaserver-media-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mediaserver-media
+  namespace: k8s-mediaserver
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: nfs
+  volumeName: mediaserver-media-pv
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/name: k8s-mediaserver
+  name: flaresolverr
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flaresolverr
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: flaresolverr
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - k8s-mediaserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: LOG_LEVEL
+          value: info
+        - name: TZ
+          value: UTC
+        image: ghcr.io/flaresolverr/flaresolverr:v3.5.2@sha256:c80ae007ce2ccdcd217a12426e4f039ef763ff90738c808d38810c3e59323767
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8191
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        name: flaresolverr
+        ports:
+        - containerPort: 8191
+          name: solverr-port
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8191
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts: []
+      securityContext:
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes: []
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: jellyfin
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: jellyfin-config
+        image: docker.io/linuxserver/jellyfin:latest@sha256:3894d9eae88418d3cf9ac6349392d2c4dad818365a59565d19edc38098897044
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: k8s-mediaserver
+        ports:
+        - containerPort: 8096
+          name: jellyfin-port
+          protocol: TCP
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          tcpSocket:
+            port: 8096
+        resources:
+          limits:
+            cpu: 4000m
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        volumeMounts:
+        - mountPath: /config
+          name: mediaserver-volume
+          subPath: config/jellyfin
+        - mountPath: /movies
+          name: mediaserver-media
+          subPath: media/movies
+        - mountPath: /tv
+          name: mediaserver-media
+          subPath: media/tv
+        - mountPath: /music
+          name: mediaserver-media
+          subPath: media/music
+      securityContext:
+        fsGroup: 1000
+        supplementalGroups:
+        - 44
+        - 993
+      volumes:
+      - hostPath:
+          path: __NFS_ROOT__/mediaserver-config
+        name: mediaserver-volume
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: mediaserver-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: prowlarr
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prowlarr
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - k8s-mediaserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: prowlarr-config
+        image: docker.io/linuxserver/prowlarr:develop@sha256:b8b1bb2c5514b46128309411d007c20c6372e8cef09977ee135488e22b0c1962
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /prowlarr/ping
+            port: 9696
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: k8s-mediaserver
+        ports:
+        - containerPort: 9696
+          name: prowlarr-port
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /prowlarr/ping
+            port: 9696
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 20
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: mediaserver-volume
+          subPath: config/prowlarr
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - hostPath:
+          path: __NFS_ROOT__/mediaserver-config
+        name: mediaserver-volume
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: mediaserver-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: radarr
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: radarr
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - k8s-mediaserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: radarr-config
+        image: docker.io/linuxserver/radarr:latest@sha256:084b3b2ab1d0ef930660727259546a241f2bdf67c9ed085d54bf1486a6887c9b
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /radarr/ping
+            port: 7878
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: k8s-mediaserver
+        ports:
+        - containerPort: 7878
+          name: radarr-port
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /radarr/ping
+            port: 7878
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 20
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: mediaserver-volume
+          subPath: config/radarr
+        - mountPath: /downloads
+          name: mediaserver-media
+          subPath: downloads
+        - mountPath: /movies
+          name: mediaserver-media
+          subPath: media/movies
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - hostPath:
+          path: __NFS_ROOT__/mediaserver-config
+        name: mediaserver-volume
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: mediaserver-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: sonarr
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: sonarr
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - k8s-mediaserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: sonarr-config
+        image: docker.io/linuxserver/sonarr:latest@sha256:48e36b608b461273b9dae857725cd0561a127f2c694b687318f6d0c5ce63e5c9
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /sonarr/ping
+            port: 8989
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: k8s-mediaserver
+        ports:
+        - containerPort: 8989
+          name: sonarr-port
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /sonarr/ping
+            port: 8989
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 20
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: mediaserver-volume
+          subPath: config/sonarr
+        - mountPath: /downloads
+          name: mediaserver-media
+          subPath: downloads
+        - mountPath: /tv
+          name: mediaserver-media
+          subPath: media/tv
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - hostPath:
+          path: __NFS_ROOT__/mediaserver-config
+        name: mediaserver-volume
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: mediaserver-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: transmission
+  namespace: k8s-mediaserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: k8s-mediaserver
+      app.kubernetes.io/name: k8s-mediaserver
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: transmission
+        app.kubernetes.io/instance: k8s-mediaserver
+        app.kubernetes.io/name: k8s-mediaserver
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - k8s-mediaserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: transmission-config
+        image: docker.io/linuxserver/transmission:latest@sha256:5b3c27a96c8a37c878a525ebf377a32032c3a3acfe845ecaa7c3eb10b09c2caa
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /transmission/
+            port: 9091
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        name: k8s-mediaserver
+        ports:
+        - containerPort: 9091
+          name: trans-port
+          protocol: TCP
+        - containerPort: 51413
+          name: trans-peer-tcp
+          protocol: TCP
+        - containerPort: 51413
+          name: trans-peer-udp
+          protocol: UDP
+        readinessProbe:
+          httpGet:
+            path: /transmission/
+            port: 9091
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 20
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: mediaserver-volume
+          subPath: config/transmission
+        - mountPath: /downloads
+          name: mediaserver-media
+          subPath: downloads
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - hostPath:
+          path: __NFS_ROOT__/mediaserver-config
+        name: mediaserver-volume
+      - name: mediaserver-media
+        persistentVolumeClaim:
+          claimName: mediaserver-media
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: local-selfsigned
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: jellyfin
+  namespace: k8s-mediaserver
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: jellyfin.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: jellyfin
+            port:
+              number: 8096
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - jellyfin.__DOMAIN__
+    secretName: jellyfin-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: prowlarr
+  namespace: k8s-mediaserver
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: prowlarr.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: prowlarr
+            port:
+              number: 9696
+        path: /
+        pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: radarr
+  namespace: k8s-mediaserver
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: radarr.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: radarr
+            port:
+              number: 7878
+        path: /
+        pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: sonarr
+  namespace: k8s-mediaserver
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: sonarr.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: sonarr
+            port:
+              number: 8989
+        path: /
+        pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    app.kubernetes.io/instance: k8s-mediaserver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-mediaserver
+    app.kubernetes.io/version: 0.10.0
+    helm.sh/chart: k8s-mediaserver-0.10.0
+  name: transmission
+  namespace: k8s-mediaserver
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: transmission.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: transmission
+            port:
+              number: 9091
+        path: /
+        pathType: Prefix

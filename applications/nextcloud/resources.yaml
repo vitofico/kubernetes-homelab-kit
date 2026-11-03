@@ -1,0 +1,1380 @@
+# Derived from Nextcloud Helm chart 8.9.0 (AGPL-3.0) and Bitnami charts
+# MariaDB 20.5.5 / Redis 21.1.3 (Apache-2.0). Modified 2026-11-03:
+# flattened, generalized, and stripped of instance-specific state.
+# See THIRD_PARTY_NOTICES.md and LICENSES/ for applicable upstream terms.
+# Every ConfigMap file mount must match a defined key; no PHP files need precreation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nextcloud
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: 11.4.6
+    helm.sh/chart: mariadb-20.5.5
+  name: nextcloud-mariadb
+  namespace: nextcloud
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 8.0.1
+    helm.sh/chart: redis-21.1.3
+  name: nextcloud-redis-master
+  namespace: nextcloud
+---
+apiVersion: v1
+data:
+  .htaccess: '# line below if for Apache 2.4
+
+    <ifModule mod_authz_core.c>
+
+    Require all denied
+
+    </ifModule>
+
+    # line below if for Apache 2.2
+
+    <ifModule !mod_authz_core.c>
+
+    deny from all
+
+    </ifModule>
+
+    # section for Apache 2.2 and 2.4
+
+    <ifModule mod_autoindex.c>
+
+    IndexIgnore *
+
+    </ifModule>'
+  apache-pretty-urls.config.php: "<?php\n$CONFIG = array (\n  'htaccess.RewriteBase'
+    => '/',\n);"
+  apcu.config.php: "<?php\n$CONFIG = array (\n  'memcache.local' => '\\OC\\Memcache\\APCu',\n);"
+  apps.config.php: "<?php\n$CONFIG = array (\n  'apps_paths' => array (\n      0 =>
+    array (\n              'path'     => OC::$SERVERROOT.'/apps',\n              'url'
+    \     => '/apps',\n              'writable' => false,\n      ),\n      1 => array
+    (\n              'path'     => OC::$SERVERROOT.'/custom_apps',\n              'url'
+    \     => '/custom_apps',\n              'writable' => true,\n      ),\n  ),\n);"
+  autoconfig.php: "<?php\n\n$autoconfig_enabled = false;\n\nif (getenv('SQLITE_DATABASE'))
+    {\n    $AUTOCONFIG['dbtype'] = 'sqlite';\n    $AUTOCONFIG['dbname'] = getenv('SQLITE_DATABASE');\n
+    \   $autoconfig_enabled = true;\n} elseif (getenv('MYSQL_DATABASE_FILE') && getenv('MYSQL_USER_FILE')
+    && getenv('MYSQL_PASSWORD_FILE') && getenv('MYSQL_HOST')) {\n    $AUTOCONFIG['dbtype']
+    = 'mysql';\n    $AUTOCONFIG['dbname'] = trim(file_get_contents(getenv('MYSQL_DATABASE_FILE')));\n
+    \   $AUTOCONFIG['dbuser'] = trim(file_get_contents(getenv('MYSQL_USER_FILE')));\n
+    \   $AUTOCONFIG['dbpass'] = trim(file_get_contents(getenv('MYSQL_PASSWORD_FILE')));\n
+    \   $AUTOCONFIG['dbhost'] = getenv('MYSQL_HOST');\n    $autoconfig_enabled = true;\n}
+    elseif (getenv('MYSQL_DATABASE') && getenv('MYSQL_USER') && getenv('MYSQL_PASSWORD')
+    && getenv('MYSQL_HOST')) {\n    $AUTOCONFIG['dbtype'] = 'mysql';\n    $AUTOCONFIG['dbname']
+    = getenv('MYSQL_DATABASE');\n    $AUTOCONFIG['dbuser'] = getenv('MYSQL_USER');\n
+    \   $AUTOCONFIG['dbpass'] = getenv('MYSQL_PASSWORD');\n    $AUTOCONFIG['dbhost']
+    = getenv('MYSQL_HOST');\n    $autoconfig_enabled = true;\n} elseif (getenv('POSTGRES_DB_FILE')
+    && getenv('POSTGRES_USER_FILE') && getenv('POSTGRES_PASSWORD_FILE') && getenv('POSTGRES_HOST'))
+    {\n    $AUTOCONFIG['dbtype'] = 'pgsql';\n    $AUTOCONFIG['dbname'] = trim(file_get_contents(getenv('POSTGRES_DB_FILE')));\n
+    \   $AUTOCONFIG['dbuser'] = trim(file_get_contents(getenv('POSTGRES_USER_FILE')));\n
+    \   $AUTOCONFIG['dbpass'] = trim(file_get_contents(getenv('POSTGRES_PASSWORD_FILE')));\n
+    \   $AUTOCONFIG['dbhost'] = getenv('POSTGRES_HOST');\n    $autoconfig_enabled
+    = true;\n} elseif (getenv('POSTGRES_DB') && getenv('POSTGRES_USER') && getenv('POSTGRES_PASSWORD')
+    && getenv('POSTGRES_HOST')) {\n    $AUTOCONFIG['dbtype'] = 'pgsql';\n    $AUTOCONFIG['dbname']
+    = getenv('POSTGRES_DB');\n    $AUTOCONFIG['dbuser'] = getenv('POSTGRES_USER');\n
+    \   $AUTOCONFIG['dbpass'] = getenv('POSTGRES_PASSWORD');\n    $AUTOCONFIG['dbhost']
+    = getenv('POSTGRES_HOST');\n    $autoconfig_enabled = true;\n}\n\nif ($autoconfig_enabled)
+    {\n    $AUTOCONFIG['directory'] = getenv('NEXTCLOUD_DATA_DIR') ?: '/var/www/html/data';\n}"
+  maintenance.config.php: "<?php\n$CONFIG = array (\n  'maintenance_window_start'
+    => 1,\n);"
+  preview.config.php: "<?php\n$CONFIG = array (\n  'enable_previews' => 'true',\n
+    \ 'enabledPreviewProviders' => array (\n    0 => 'OC\\Preview\\Movie',\n    1
+    => 'OC\\Preview\\PNG',\n    2 => 'OC\\Preview\\JPEG',\n    3 => 'OC\\Preview\\GIF',\n
+    \   4 => 'OC\\Preview\\BMP',\n    5 => 'OC\\Preview\\XBitmap',\n    6 => 'OC\\Preview\\MP3',\n
+    \   7 => 'OC\\Preview\\MP4',\n    8 => 'OC\\Preview\\TXT',\n    9 => 'OC\\Preview\\MarkDown',\n
+    \   10 => 'OC\\Preview\\PDF',\n  ),\n);"
+  redis.config.php: "<?php\nif (getenv('REDIS_HOST')) {\n  $CONFIG = array(\n    'memcache.distributed'
+    => '\\OC\\Memcache\\Redis',\n    'memcache.locking' => '\\OC\\Memcache\\Redis',\n
+    \   'redis' => array(\n      'host' => getenv('REDIS_HOST'),\n      'password'
+    => getenv('REDIS_HOST_PASSWORD_FILE') ? trim(file_get_contents(getenv('REDIS_HOST_PASSWORD_FILE')))
+    : (string) getenv('REDIS_HOST_PASSWORD'),\n    ),\n  );\n\n  if (getenv('REDIS_HOST_PORT')
+    !== false) {\n    $CONFIG['redis']['port'] = (int) getenv('REDIS_HOST_PORT');\n
+    \ } elseif (getenv('REDIS_HOST')[0] != '/') {\n    $CONFIG['redis']['port'] =
+    6379;\n  }\n\n  if (getenv('REDIS_HOST_USER') !== false) {\n    $CONFIG['redis']['user']
+    = (string) getenv('REDIS_HOST_USER');\n  }\n}"
+  reverse-proxy.config.php: "<?php\n$overwriteHost = getenv('OVERWRITEHOST');\nif
+    ($overwriteHost) {\n  $CONFIG['overwritehost'] = $overwriteHost;\n}\n\n$overwriteProtocol
+    = getenv('OVERWRITEPROTOCOL');\nif ($overwriteProtocol) {\n  $CONFIG['overwriteprotocol']
+    = $overwriteProtocol;\n}\n\n$overwriteCliUrl = getenv('OVERWRITECLIURL');\nif
+    ($overwriteCliUrl) {\n  $CONFIG['overwrite.cli.url'] = $overwriteCliUrl;\n}\n\n$overwriteWebRoot
+    = getenv('OVERWRITEWEBROOT');\nif ($overwriteWebRoot) {\n  $CONFIG['overwritewebroot']
+    = $overwriteWebRoot;\n}\n\n$overwriteCondAddr = getenv('OVERWRITECONDADDR');\nif
+    ($overwriteCondAddr) {\n  $CONFIG['overwritecondaddr'] = $overwriteCondAddr;\n}\n\n$trustedProxies
+    = getenv('TRUSTED_PROXIES');\nif ($trustedProxies) {\n  $CONFIG['trusted_proxies']
+    = array_filter(array_map('trim', explode(' ', $trustedProxies)));\n}\n\n$forwardedForHeaders
+    = getenv('FORWARDED_FOR_HEADERS');\nif ($forwardedForHeaders) {\n  $CONFIG['forwarded_for_headers']
+    = array_filter(array_map('trim', explode(' ', $forwardedForHeaders)));\n}"
+  s3.config.php: "<?php\nif (getenv('OBJECTSTORE_S3_BUCKET')) {\n  $use_ssl = getenv('OBJECTSTORE_S3_SSL');\n
+    \ $use_path = getenv('OBJECTSTORE_S3_USEPATH_STYLE');\n  $use_legacyauth = getenv('OBJECTSTORE_S3_LEGACYAUTH');\n
+    \ $autocreate = getenv('OBJECTSTORE_S3_AUTOCREATE');\n  $CONFIG = array(\n    'objectstore'
+    => array(\n      'class' => '\\OC\\Files\\ObjectStore\\S3',\n      'arguments'
+    => array(\n        'bucket' => getenv('OBJECTSTORE_S3_BUCKET'),\n        'region'
+    => getenv('OBJECTSTORE_S3_REGION') ?: '',\n        'hostname' => getenv('OBJECTSTORE_S3_HOST')
+    ?: '',\n        'port' => getenv('OBJECTSTORE_S3_PORT') ?: '',\n        'storageClass'
+    => getenv('OBJECTSTORE_S3_STORAGE_CLASS') ?: '',\n        'objectPrefix' => getenv(\"OBJECTSTORE_S3_OBJECT_PREFIX\")
+    ? getenv(\"OBJECTSTORE_S3_OBJECT_PREFIX\") : \"urn:oid:\",\n        'autocreate'
+    => strtolower($autocreate) !== 'false',\n        'use_ssl' => strtolower($use_ssl)
+    !== 'false',\n        // required for some non Amazon S3 implementations\n        'use_path_style'
+    => $use_path == true && strtolower($use_path) !== 'false',\n        // required
+    for older protocol versions\n        'legacy_auth' => $use_legacyauth == true
+    && strtolower($use_legacyauth) !== 'false'\n      )\n    )\n  );\n\n  if (getenv('OBJECTSTORE_S3_KEY_FILE'))
+    {\n    $CONFIG['objectstore']['arguments']['key'] = trim(file_get_contents(getenv('OBJECTSTORE_S3_KEY_FILE')));\n
+    \ } elseif (getenv('OBJECTSTORE_S3_KEY')) {\n    $CONFIG['objectstore']['arguments']['key']
+    = getenv('OBJECTSTORE_S3_KEY');\n  } else {\n    $CONFIG['objectstore']['arguments']['key']
+    = '';\n  }\n\n  if (getenv('OBJECTSTORE_S3_SECRET_FILE')) {\n    $CONFIG['objectstore']['arguments']['secret']
+    = trim(file_get_contents(getenv('OBJECTSTORE_S3_SECRET_FILE')));\n  } elseif (getenv('OBJECTSTORE_S3_SECRET'))
+    {\n    $CONFIG['objectstore']['arguments']['secret'] = getenv('OBJECTSTORE_S3_SECRET');\n
+    \ } else {\n    $CONFIG['objectstore']['arguments']['secret'] = '';\n  }\n\n  if
+    (getenv('OBJECTSTORE_S3_SSE_C_KEY_FILE')) {\n    $CONFIG['objectstore']['arguments']['sse_c_key']
+    = trim(file_get_contents(getenv('OBJECTSTORE_S3_SSE_C_KEY_FILE')));\n  } elseif
+    (getenv('OBJECTSTORE_S3_SSE_C_KEY')) {\n    $CONFIG['objectstore']['arguments']['sse_c_key']
+    = getenv('OBJECTSTORE_S3_SSE_C_KEY');\n  }\n}"
+  swift.config.php: "<?php\nif (getenv('OBJECTSTORE_SWIFT_URL')) {\n    $autocreate
+    = getenv('OBJECTSTORE_SWIFT_AUTOCREATE');\n  $CONFIG = array(\n    'objectstore'
+    => [\n      'class' => 'OC\\\\Files\\\\ObjectStore\\\\Swift',\n      'arguments'
+    => [\n        'autocreate' => $autocreate == true && strtolower($autocreate) !==
+    'false',\n        'user' => [\n          'name' => getenv('OBJECTSTORE_SWIFT_USER_NAME'),\n
+    \         'password' => getenv('OBJECTSTORE_SWIFT_USER_PASSWORD'),\n          'domain'
+    => [\n            'name' => (getenv('OBJECTSTORE_SWIFT_USER_DOMAIN')) ?: 'Default',\n
+    \         ],\n        ],\n        'scope' => [\n          'project' => [\n            'name'
+    => getenv('OBJECTSTORE_SWIFT_PROJECT_NAME'),\n            'domain' => [\n              'name'
+    => (getenv('OBJECTSTORE_SWIFT_PROJECT_DOMAIN')) ?: 'Default',\n            ],\n
+    \         ],\n        ],\n        'serviceName' => (getenv('OBJECTSTORE_SWIFT_SERVICE_NAME'))
+    ?: 'swift',\n        'region' => getenv('OBJECTSTORE_SWIFT_REGION'),\n        'url'
+    => getenv('OBJECTSTORE_SWIFT_URL'),\n        'bucket' => getenv('OBJECTSTORE_SWIFT_CONTAINER_NAME'),\n
+    \     ]\n    ]\n  );\n}"
+  upgrade-disable-web.config.php: "<?php\n$CONFIG = array (\n  'upgrade.disable-web'
+    => true,\n);"
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/version: 35.0.2
+    helm.sh/chart: nextcloud-8.9.0
+  name: nextcloud-config
+  namespace: nextcloud
+---
+apiVersion: v1
+data:
+  custom.cnf: '[mysqld]
+
+    skip-name-resolve
+
+    explicit_defaults_for_timestamp
+
+    port=3306
+
+    max_allowed_packet=16M
+
+    bind-address=*
+
+    character-set-server=UTF8
+
+    collation-server=utf8_general_ci
+
+    slow_query_log=0
+
+    long_query_time=10.0
+
+    binlog_expire_logs_seconds=2592000
+
+
+    [client]
+
+    port=3306
+
+    default-character-set=UTF8'
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: '11.4'
+  name: nextcloud-mariadb
+  namespace: nextcloud
+---
+apiVersion: v1
+data:
+  redis.conf: '# Persistence: AOF enabled, RDB disabled
+
+    appendonly yes
+
+    save ""
+
+    dir /data
+
+    # Security: disable dangerous commands
+
+    rename-command FLUSHDB ""
+
+    rename-command FLUSHALL ""'
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: '8'
+  name: nextcloud-redis-configuration
+  namespace: nextcloud
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: app
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/version: 35.0.2
+    helm.sh/chart: nextcloud-8.9.0
+  name: nextcloud
+  namespace: nextcloud
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app.kubernetes.io/component: app
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: nextcloud
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: 11.4.6
+    helm.sh/chart: mariadb-20.5.5
+  name: nextcloud-mariadb
+  namespace: nextcloud
+spec:
+  ports:
+  - name: mysql
+    nodePort: null
+    port: 3306
+    protocol: TCP
+    targetPort: mysql
+  selector:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: mariadb
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: 11.4.6
+    helm.sh/chart: mariadb-20.5.5
+  name: nextcloud-mariadb-headless
+  namespace: nextcloud
+spec:
+  clusterIP: None
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: mysql
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 8.0.1
+    helm.sh/chart: redis-21.1.3
+  name: nextcloud-redis-headless
+  namespace: nextcloud
+spec:
+  clusterIP: None
+  ports:
+  - name: tcp-redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: redis
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 8.0.1
+    helm.sh/chart: redis-21.1.3
+  name: nextcloud-redis-master
+  namespace: nextcloud
+spec:
+  internalTrafficPolicy: Cluster
+  ports:
+  - name: tcp-redis
+    nodePort: null
+    port: 6379
+    targetPort: redis
+  selector:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: redis
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nextcloud-nfs-pv
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 3000Gi
+  mountOptions:
+  - soft
+  - timeo=30
+  - retrans=3
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_ROOT__/nextcloud-nfs-pv
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-nfs-pvc
+  namespace: nextcloud
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 3000Gi
+  storageClassName: nfs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: app
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/version: 35.0.2
+    helm.sh/chart: nextcloud-8.9.0
+  name: nextcloud
+  namespace: nextcloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: app
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: nextcloud
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        hooks-hash: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+        nextcloud-config-hash: 9589e8ea35191a966fc83ffe97bb1b0b7484df4cf8bbdd130ceaaa1f7caf3766
+        php-config-hash: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+      labels:
+        app.kubernetes.io/component: app
+        app.kubernetes.io/instance: nextcloud
+        app.kubernetes.io/name: nextcloud
+        nextcloud-redis-client: 'true'
+    spec:
+      containers:
+      - env:
+        - name: NEXTCLOUD_INIT_HTACCESS
+          value: 'true'
+        - name: OVERWRITEPROTOCOL
+          value: https
+        - name: MYSQL_HOST
+          value: nextcloud-mariadb
+        - name: MYSQL_DATABASE
+          value: nextcloud
+        - name: MYSQL_USER
+          value: nextcloud
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: db-password
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_TRUSTED_DOMAINS
+          value: nextcloud.__DOMAIN__ nextcloud.__DOMAIN__
+        - name: NEXTCLOUD_DATA_DIR
+          value: /var/www/html/data
+        - name: MAIL_FROM_ADDRESS
+          value: homelab
+        - name: MAIL_DOMAIN
+          value: __DOMAIN__
+        - name: SMTP_SECURE
+          value: starttls
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_AUTHTYPE
+          value: LOGIN
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              key: smtp-host
+              name: nextcloud-credentials
+        - name: SMTP_NAME
+          valueFrom:
+            secretKeyRef:
+              key: smtp-username
+              name: nextcloud-credentials
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: smtp-password
+              name: nextcloud-credentials
+        - name: REDIS_HOST
+          value: nextcloud-redis-master
+        - name: REDIS_HOST_PORT
+          value: '6379'
+        - name: REDIS_HOST_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: nextcloud-credentials
+        image: docker.io/library/nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: nextcloud.__DOMAIN__
+            path: /status.php
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: nextcloud
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: nextcloud.__DOMAIN__
+            path: /status.php
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 50m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - NET_BIND_SERVICE
+            - SETUID
+            - SETGID
+            drop:
+            - ALL
+        startupProbe:
+          failureThreshold: 30
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: nextcloud.__DOMAIN__
+            path: /status.php
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /var/www/
+          name: nextcloud-main
+          subPath: root
+        - mountPath: /var/www/html
+          name: nextcloud-main
+          subPath: html
+        - mountPath: /var/www/html/data
+          name: nextcloud-main
+          subPath: data
+        - mountPath: /var/www/html/config
+          name: nextcloud-main
+          subPath: config
+        - mountPath: /var/www/html/custom_apps
+          name: nextcloud-main
+          subPath: custom_apps
+        - mountPath: /var/www/tmp
+          name: nextcloud-main
+          subPath: tmp
+        - mountPath: /var/www/html/themes
+          name: nextcloud-main
+          subPath: themes
+        - mountPath: /var/www/html/config/maintenance.config.php
+          name: nextcloud-config
+          subPath: maintenance.config.php
+        - mountPath: /var/www/html/config/preview.config.php
+          name: nextcloud-config
+          subPath: preview.config.php
+        - mountPath: /var/www/html/config/.htaccess
+          name: nextcloud-config
+          subPath: .htaccess
+        - mountPath: /var/www/html/config/apache-pretty-urls.config.php
+          name: nextcloud-config
+          subPath: apache-pretty-urls.config.php
+        - mountPath: /var/www/html/config/apcu.config.php
+          name: nextcloud-config
+          subPath: apcu.config.php
+        - mountPath: /var/www/html/config/apps.config.php
+          name: nextcloud-config
+          subPath: apps.config.php
+        - mountPath: /var/www/html/config/autoconfig.php
+          name: nextcloud-config
+          subPath: autoconfig.php
+        - mountPath: /var/www/html/config/redis.config.php
+          name: nextcloud-config
+          subPath: redis.config.php
+        - mountPath: /var/www/html/config/reverse-proxy.config.php
+          name: nextcloud-config
+          subPath: reverse-proxy.config.php
+        - mountPath: /var/www/html/config/s3.config.php
+          name: nextcloud-config
+          subPath: s3.config.php
+        - mountPath: /var/www/html/config/swift.config.php
+          name: nextcloud-config
+          subPath: swift.config.php
+        - mountPath: /var/www/html/config/upgrade-disable-web.config.php
+          name: nextcloud-config
+          subPath: upgrade-disable-web.config.php
+      - command:
+        - /bin/sh
+        - -ec
+        - "while [ -e /var/www/html/config/.homelab-upgrade-hold ]; do\n  sleep 5\ndone\nexec
+          /cron.sh\n"
+        env:
+        - name: OVERWRITEPROTOCOL
+          value: https
+        - name: MYSQL_HOST
+          value: nextcloud-mariadb
+        - name: MYSQL_DATABASE
+          value: nextcloud
+        - name: MYSQL_USER
+          value: nextcloud
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: db-password
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: nextcloud-credentials
+        - name: NEXTCLOUD_TRUSTED_DOMAINS
+          value: nextcloud.__DOMAIN__ nextcloud.__DOMAIN__
+        - name: NEXTCLOUD_DATA_DIR
+          value: /var/www/html/data
+        - name: MAIL_FROM_ADDRESS
+          value: homelab
+        - name: MAIL_DOMAIN
+          value: __DOMAIN__
+        - name: SMTP_SECURE
+          value: starttls
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_AUTHTYPE
+          value: LOGIN
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              key: smtp-host
+              name: nextcloud-credentials
+        - name: SMTP_NAME
+          valueFrom:
+            secretKeyRef:
+              key: smtp-username
+              name: nextcloud-credentials
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: smtp-password
+              name: nextcloud-credentials
+        - name: REDIS_HOST
+          value: nextcloud-redis-master
+        - name: REDIS_HOST_PORT
+          value: '6379'
+        - name: REDIS_HOST_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: nextcloud-credentials
+        image: docker.io/library/nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+        imagePullPolicy: IfNotPresent
+        name: nextcloud-cron
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETGID
+            - SETUID
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /var/www/
+          name: nextcloud-main
+          subPath: root
+        - mountPath: /var/www/html
+          name: nextcloud-main
+          subPath: html
+        - mountPath: /var/www/html/data
+          name: nextcloud-main
+          subPath: data
+        - mountPath: /var/www/html/config
+          name: nextcloud-main
+          subPath: config
+        - mountPath: /var/www/html/custom_apps
+          name: nextcloud-main
+          subPath: custom_apps
+        - mountPath: /var/www/tmp
+          name: nextcloud-main
+          subPath: tmp
+        - mountPath: /var/www/html/themes
+          name: nextcloud-main
+          subPath: themes
+        - mountPath: /var/www/html/config/maintenance.config.php
+          name: nextcloud-config
+          subPath: maintenance.config.php
+        - mountPath: /var/www/html/config/preview.config.php
+          name: nextcloud-config
+          subPath: preview.config.php
+        - mountPath: /var/www/html/config/.htaccess
+          name: nextcloud-config
+          subPath: .htaccess
+        - mountPath: /var/www/html/config/apache-pretty-urls.config.php
+          name: nextcloud-config
+          subPath: apache-pretty-urls.config.php
+        - mountPath: /var/www/html/config/apcu.config.php
+          name: nextcloud-config
+          subPath: apcu.config.php
+        - mountPath: /var/www/html/config/apps.config.php
+          name: nextcloud-config
+          subPath: apps.config.php
+        - mountPath: /var/www/html/config/autoconfig.php
+          name: nextcloud-config
+          subPath: autoconfig.php
+        - mountPath: /var/www/html/config/redis.config.php
+          name: nextcloud-config
+          subPath: redis.config.php
+        - mountPath: /var/www/html/config/reverse-proxy.config.php
+          name: nextcloud-config
+          subPath: reverse-proxy.config.php
+        - mountPath: /var/www/html/config/s3.config.php
+          name: nextcloud-config
+          subPath: s3.config.php
+        - mountPath: /var/www/html/config/swift.config.php
+          name: nextcloud-config
+          subPath: swift.config.php
+        - mountPath: /var/www/html/config/upgrade-disable-web.config.php
+          name: nextcloud-config
+          subPath: upgrade-disable-web.config.php
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - until mariadb --host=nextcloud-mariadb --user=${MYSQL_USER} --password=${MYSQL_PASSWORD}
+          --execute="SELECT 1;"; do echo waiting for mysql; sleep 2; done;
+        env:
+        - name: MYSQL_USER
+          value: nextcloud
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: db-password
+              name: nextcloud-credentials
+        image: docker.io/mariadb:11.4
+        name: mariadb-isalive
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts: []
+      securityContext:
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: nextcloud-main
+        persistentVolumeClaim:
+          claimName: nextcloud-nfs-pvc
+      - configMap:
+          name: nextcloud-config
+        name: nextcloud-config
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: '11.4'
+  name: nextcloud-mariadb
+  namespace: nextcloud
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: primary
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/part-of: mariadb
+  serviceName: nextcloud-mariadb-headless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: primary
+        app.kubernetes.io/instance: nextcloud
+        app.kubernetes.io/name: mariadb
+        app.kubernetes.io/part-of: mariadb
+        app.kubernetes.io/version: '11.4'
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: MARIADB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: mariadb-root-password
+              name: nextcloud-credentials
+        - name: MARIADB_USER
+          value: nextcloud
+        - name: MARIADB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: db-password
+              name: nextcloud-credentials
+        - name: MARIADB_DATABASE
+          value: nextcloud
+        image: docker.io/mariadb:11.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - mariadb-admin status -uroot -p"$MARIADB_ROOT_PASSWORD"
+          failureThreshold: 3
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+        name: mariadb
+        ports:
+        - containerPort: 3306
+          name: mysql
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD"
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 250m
+            ephemeral-storage: 2Gi
+            memory: 768Mi
+          requests:
+            cpu: 75m
+            ephemeral-storage: 50Mi
+            memory: 384Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 999
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: data
+        - mountPath: /etc/mysql/conf.d/custom.cnf
+          name: config
+          subPath: custom.cnf
+        - mountPath: /run/mysqld
+          name: run
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: nextcloud-mariadb
+      volumes:
+      - configMap:
+          name: nextcloud-mariadb
+        name: config
+      - emptyDir: {}
+        name: run
+      - emptyDir: {}
+        name: tmp
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      labels:
+        app.kubernetes.io/component: primary
+        app.kubernetes.io/instance: nextcloud
+        app.kubernetes.io/name: mariadb
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: '8'
+  name: nextcloud-redis-master
+  namespace: nextcloud
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: master
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: redis
+  serviceName: nextcloud-redis-headless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: master
+        app.kubernetes.io/instance: nextcloud
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/version: '8'
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - /etc/redis/redis.conf
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        command:
+        - redis-server
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: nextcloud-credentials
+        image: docker.io/redis:8-alpine
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+          failureThreshold: 5
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 5
+        name: redis
+        ports:
+        - containerPort: 6379
+          name: redis
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 150m
+            ephemeral-storage: 2Gi
+            memory: 192Mi
+          requests:
+            cpu: 100m
+            ephemeral-storage: 50Mi
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 999
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+        - mountPath: /etc/redis
+          name: config
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: nextcloud-redis-master
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          name: nextcloud-redis-configuration
+        name: config
+      - emptyDir: {}
+        name: tmp
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      labels:
+        app.kubernetes.io/component: master
+        app.kubernetes.io/instance: nextcloud
+        app.kubernetes.io/name: redis
+      name: redis-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 8Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app.kubernetes.io/component: files-scan
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/name: nextcloud
+  name: nextcloud-files-scan
+  namespace: nextcloud
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: files-scan
+            app.kubernetes.io/instance: nextcloud
+            app.kubernetes.io/name: nextcloud
+        spec:
+          containers:
+          - command:
+            - /bin/sh
+            - -c
+            - "if [ -e /var/www/html/config/.homelab-upgrade-hold ]; then\n  echo
+              \"Nextcloud upgrade hold; skipping file scan\"\n  exit 0\nfi\nexec su
+              -s /bin/sh www-data -c 'php /var/www/html/occ files:scan user-d --path=\"/user-d/files/HighResPhotos\"'\n"
+            env:
+            - name: MYSQL_HOST
+              value: nextcloud-mariadb
+            - name: MYSQL_DATABASE
+              value: nextcloud
+            - name: MYSQL_USER
+              value: nextcloud
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db-password
+                  name: nextcloud-credentials
+            - name: REDIS_HOST
+              value: nextcloud-redis-master
+            - name: REDIS_HOST_PORT
+              value: '6379'
+            - name: REDIS_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: redis-password
+                  name: nextcloud-credentials
+            - name: NEXTCLOUD_DATA_DIR
+              value: /var/www/html/data
+            image: docker.io/library/nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+            imagePullPolicy: IfNotPresent
+            name: files-scan
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            volumeMounts:
+            - mountPath: /var/www/
+              name: nextcloud-main
+              subPath: root
+            - mountPath: /var/www/html
+              name: nextcloud-main
+              subPath: html
+            - mountPath: /var/www/html/data
+              name: nextcloud-main
+              subPath: data
+            - mountPath: /var/www/html/config
+              name: nextcloud-main
+              subPath: config
+            - mountPath: /var/www/html/custom_apps
+              name: nextcloud-main
+              subPath: custom_apps
+            - mountPath: /var/www/html/config/redis.config.php
+              name: nextcloud-config
+              subPath: redis.config.php
+          initContainers:
+          - command:
+            - sh
+            - -c
+            - until mariadb --host=nextcloud-mariadb --user=${MYSQL_USER} --password=${MYSQL_PASSWORD}
+              --execute="SELECT 1;"; do echo waiting for mysql; sleep 2; done;
+            env:
+            - name: MYSQL_USER
+              value: nextcloud
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db-password
+                  name: nextcloud-credentials
+            image: docker.io/mariadb:11.4
+            name: mariadb-isalive
+            resources:
+              limits:
+                cpu: 200m
+                memory: 128Mi
+              requests:
+                cpu: 50m
+                memory: 64Mi
+            volumeMounts: []
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 33
+          volumes:
+          - name: nextcloud-main
+            persistentVolumeClaim:
+              claimName: nextcloud-nfs-pvc
+          - configMap:
+              name: nextcloud-config
+            name: nextcloud-config
+  schedule: 10 * * * *
+  successfulJobsHistoryLimit: 3
+  suspend: true
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app.kubernetes.io/component: primary
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: mariadb
+    app.kubernetes.io/version: 11.4.6
+    helm.sh/chart: mariadb-20.5.5
+  name: nextcloud-mariadb
+  namespace: nextcloud
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: primary
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: mariadb
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 8.0.1
+    helm.sh/chart: redis-21.1.3
+  name: nextcloud-redis-master
+  namespace: nextcloud
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: master
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: redis
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: local-selfsigned
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+  labels:
+    app.kubernetes.io/component: app
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/version: 35.0.2
+    helm.sh/chart: nextcloud-8.9.0
+  name: nextcloud
+  namespace: nextcloud
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: nextcloud.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: nextcloud
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  - host: nextcloud.__DOMAIN__
+    http:
+      paths:
+      - backend:
+          service:
+            name: nextcloud
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - nextcloud.__DOMAIN__
+    secretName: nextcloud-tls
+  - hosts:
+    - nextcloud.__DOMAIN__
+    secretName: nextcloud-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acme-solver
+  namespace: nextcloud
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 8089
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: 'true'
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nextcloud-to-databases
+  namespace: nextcloud
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/instance: nextcloud
+          app.kubernetes.io/name: nextcloud
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: uptime-kuma
+    ports:
+    - port: 3306
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: mariadb
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nextcloud-to-redis
+  namespace: nextcloud
+spec:
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/instance: nextcloud
+          app.kubernetes.io/name: nextcloud
+    ports:
+    - port: 6379
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: redis
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-nextcloud
+  namespace: nextcloud
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: app
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: nextcloud
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: nextcloud
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/instance: nextcloud
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 8.0.1
+    helm.sh/chart: redis-21.1.3
+  name: nextcloud-redis
+  namespace: nextcloud
+spec:
+  egress:
+  - {}
+  ingress:
+  - ports:
+    - port: 6379
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: nextcloud
+      app.kubernetes.io/name: redis
+  policyTypes:
+  - Ingress
+  - Egress
