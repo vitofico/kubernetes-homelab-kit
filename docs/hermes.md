@@ -8,8 +8,8 @@ opt-in restart workflow from an authenticated chat.
 ## Image and platform prerequisites
 
 The companion [Hermes container repository](https://github.com/vitofico/hermes-agent)
-builds `ghcr.io/vitofico/hermes-agent` and
-`ghcr.io/vitofico/hermes-agent-router`. The catalog pins reviewed companion
+builds `ghcr.io/vitofico/hermes-agent/gateway` and
+`ghcr.io/vitofico/hermes-agent/router`. The catalog pins reviewed companion
 builds by immutable digest. Override `images.IMAGE_HERMES_AGENT` and, when
 enabling the router, `images.IMAGE_HERMES_ALERT_ROUTER` to select a different
 reviewed build. Companion images remain private while publication is prepared;
@@ -170,7 +170,7 @@ Keep old diagnostic kubeconfigs and manifests private.
 ## Optional alert router
 
 `hermes-alert-router` is a separate optional module using the companion
-`ghcr.io/vitofico/hermes-agent-router` image, pinned by digest through its image
+`ghcr.io/vitofico/hermes-agent/router` image, pinned by digest through its image
 override and catalog secret contract. Remote chat and restart requests do not need
 it. Agent and router share generated `HERMES_WEBHOOK_SECRET`; the agent also
 receives it as upstream `WEBHOOK_SECRET`. The configured `uptime-kuma` webhook
@@ -192,3 +192,13 @@ Before relying on remote recovery, test your chosen image loading the skill,
 successful status reads, blocked direct writes, a signed webhook with no tool execution, rejected unauthorized chat users,
 one approved restart, and observed application readiness. No real provider or
 chat messages are sent by default integration tests.
+
+## Transition from earlier images
+
+The fresh companion source repository publishes the gateway and router under
+`ghcr.io/vitofico/hermes-agent/gateway` and
+`ghcr.io/vitofico/hermes-agent/router`. Older flat image packages remain private
+and are retained during migration. They are separate packages; changing a
+source repository name does not change the image reference in a running
+deployment. Review the new digest and configuration contract before switching,
+then keep the prior pinned reference available for rollback.

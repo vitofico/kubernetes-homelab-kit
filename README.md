@@ -135,7 +135,7 @@ builds; override them through `IMAGE_HERMES_AGENT` and
 [Hermes guide](docs/hermes.md) for compatibility and acceptance checks.
 
 [Dynamic DNS Updater](https://github.com/vitofico/dynamic-dns-updater) supplies
-`ghcr.io/vitofico/dynamic-dns-updater`. Its optional scheduled module supports
+`ghcr.io/vitofico/dynamic-dns-updater/updater`. Its optional scheduled module supports
 DuckDNS, deSEC/dedyn, FreeDNS, and Dynu. It starts suspended and uses your own
 provider credentials. Follow [dynamic DNS setup](docs/dynamic-dns.md) before
 enabling updates. The kit retains explicit image overrides for all three; pin

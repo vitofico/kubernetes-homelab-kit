@@ -96,7 +96,7 @@ class DdnsConfigurationTests(unittest.TestCase):
         docs = lab.documents(self.read())
         job = next(item for item in docs if item['kind'] == 'CronJob')
         image = lab.pod_spec(job)['containers'][0]['image']
-        self.assertRegex(image, r'^ghcr\.io/vitofico/dynamic-dns-updater@sha256:[0-9a-f]{64}$')
+        self.assertRegex(image, r'^ghcr\.io/vitofico/dynamic-dns-updater/updater@sha256:[0-9a-f]{64}$')
 
     def test_missing_credentials_fail_doctor(self):
         self.read()

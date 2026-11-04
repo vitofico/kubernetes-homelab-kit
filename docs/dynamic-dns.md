@@ -1,9 +1,9 @@
 # Scheduled dynamic DNS updates
 
-The optional `dynamic-dns-updater` module runs the public
+The optional `dynamic-dns-updater` module runs the companion
 [Dynamic DNS Updater](https://github.com/vitofico/dynamic-dns-updater) as a
 one-shot Kubernetes CronJob. Its image repository is
-`ghcr.io/vitofico/dynamic-dns-updater`. It supports DuckDNS, deSEC/dedyn,
+`ghcr.io/vitofico/dynamic-dns-updater/updater`. It supports DuckDNS, deSEC/dedyn,
 FreeDNS, and Dynu. The module is separate from the LAN `dns` application and
 requires no Argo installation.
 
@@ -76,7 +76,10 @@ Revoke the provider token when retiring the integration.
 ## Migration from the older image
 
 Replace `ghcr.io/vitofico/docker-duckdns-updater` with the reviewed release digest
-from `ghcr.io/vitofico/dynamic-dns-updater`. Use the default command or
+from `ghcr.io/vitofico/dynamic-dns-updater/updater`. Use the default command or
 `/usr/local/bin/update_dns.sh`; the old `update_duckdns.sh` path is obsolete.
+Earlier `ghcr.io/vitofico/dynamic-dns-updater` flat packages are also legacy
+packages. Retain existing private images until the replacement is verified; the
+fresh source repository and nested package have separate publication settings.
 Provider variables retain their documented names. deSEC updating now uses the
-same public updater as DuckDNS rather than a copied shell implementation.
+same companion updater as DuckDNS rather than a copied shell implementation.
