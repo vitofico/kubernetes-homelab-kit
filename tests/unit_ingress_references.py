@@ -21,6 +21,7 @@ class IngressReferenceTests(unittest.TestCase):
         baseline = yaml.safe_load((ROOT / 'config/site.example.yaml').read_text())
         baseline.update(profile='server', domain='lab.example.net')
         baseline['network']['ftp_ip'] = '192.0.2.11'
+        baseline['ddns'] = {'provider': 'desec', 'domains': 'host.example.net', 'suspend': True}
         baseline['hermes']['api_cidrs'] = ['192.0.2.1/32']
         baseline['images'] = {marker: f'registry.example.test/{app}:review'
                               for app, entry in lab.catalog().items() for marker in entry.get('required_images', {})}

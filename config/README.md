@@ -28,7 +28,8 @@ physical hardware or external integrations and cannot run in kind.
 | `network.loadbalancer_pool` | Optional ordered `start-end` range for MetalLB, inside the LAN, containing `loadbalancer_ip`, excluding the NFS server |
 | `network.ftp_ip` | Required for server `ftp-camera`: distinct pool address used for both its Service and passive FTP advertisement |
 | `hermes` | Optional API endpoint CIDRs, named restart targets, and Telegram access settings; see [Hermes setup](../docs/hermes.md) |
-| `images` | Overrides required by catalog `required_images`; keys may include surrounding double underscores or omit them |
+| `ddns` | Optional provider, schedule, suspension and hostname/IP settings for the [dynamic DNS updater](../docs/dynamic-dns.md) |
+| `images` | Override catalog image defaults or supply `required_images` without defaults; keys may include surrounding double underscores or omit them |
 
 `configure --non-interactive` accepts the checked-in kind defaults. For automation,
 prepare `local/site.yaml` and run:
@@ -94,7 +95,7 @@ Unknown future secret fields also remain empty until an operator supplies them.
 The server profile requires an existing configured cluster and operator-managed
 NFS exports, network-policy enforcement, DNS, and compatible storage. It does
 not partition disks, install a Kubernetes distribution, modify router settings,
-or publish DNS records automatically.
+or publish DNS records unless you explicitly enable the optional dynamic DNS job.
 
 ## Media application routes
 

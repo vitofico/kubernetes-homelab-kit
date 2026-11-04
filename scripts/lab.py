@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parent.parent
 _hermes_spec = importlib.util.spec_from_file_location('homelab_hermes', Path(__file__).with_name('hermes.py'))
 hermes = importlib.util.module_from_spec(_hermes_spec)
 _hermes_spec.loader.exec_module(hermes)
+_ddns_spec = importlib.util.spec_from_file_location('homelab_ddns', Path(__file__).with_name('ddns.py'))
+ddns = importlib.util.module_from_spec(_ddns_spec)
+_ddns_spec.loader.exec_module(ddns)
 MARKER = re.compile(r"__[A-Z][A-Z0-9_]*__")
 SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 SAFE_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
@@ -116,7 +119,8 @@ def config(path):
     cfg = load(path)
     if isinstance(cfg, dict):
         cfg.setdefault('hermes', copy.deepcopy(hermes.DEFAULTS))
-    exact_keys(cfg, ["profile", "cluster_name", "domain", "tls", "applications", "storage", "network", "images", "hermes"], "site.yaml")
+        cfg.setdefault('ddns', copy.deepcopy(ddns.DEFAULTS))
+    exact_keys(cfg, ["profile", "cluster_name", "domain", "tls", "applications", "storage", "network", "images", "hermes", "ddns"], "site.yaml")
     if cfg["profile"] not in ("kind", "server"):
         raise Error("profile must be kind or server")
     if not isinstance(cfg["cluster_name"], str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,50}", cfg["cluster_name"]):
@@ -187,6 +191,11 @@ def config(path):
     if not isinstance(images, dict) or any(not isinstance(k, str) or not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9_./:@-]+", v) for k, v in images.items()):
         raise Error("images must map image marker names to container references")
     for app in apps:
+        for name, value in available[app].get("default_images", {}).items():
+            if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_./:@-]+", value):
+                raise Error(f"Invalid catalog default image for {app}")
+            if name not in images and name.strip("_") not in images:
+                images[name] = value
         for name in available[app].get("required_images", {}):
             key = name.strip("_")
             if name not in images and key not in images:
@@ -195,6 +204,7 @@ def config(path):
         raise Error("server profile requires your own configured domain")
     try:
         hermes.validate(cfg)
+        ddns.validate(cfg)
     except ValueError as exc:
         raise Error(str(exc)) from None
     return cfg
@@ -220,6 +230,8 @@ def required_secrets(cfg):
     requirements = {app: copy.deepcopy(catalog()[app]['secrets']) for app in cfg['applications'] if catalog()[app].get('secrets')}
     for name, keys in hermes.extra_secrets(cfg).items():
         requirements.setdefault('hermes-agent', {}).setdefault(name, []).extend(keys)
+    for name, keys in ddns.extra_secrets(cfg).items():
+        requirements.setdefault('dynamic-dns-updater', {}).setdefault(name, []).extend(keys)
     return requirements
 
 
@@ -446,6 +458,7 @@ def documents(cfg, *, validate_targets=True):
     result = unique
     try:
         result = hermes.augment(cfg, result, ROOT, validate_targets=validate_targets)
+        result = ddns.augment(cfg, result)
     except ValueError as exc:
         raise Error(str(exc)) from None
     identities = [(x.get("apiVersion"), x.get("kind"), x.get("metadata", {}).get("namespace"), x.get("metadata", {}).get("name")) for x in result]
