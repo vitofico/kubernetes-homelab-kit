@@ -12,10 +12,10 @@ builds `ghcr.io/vitofico/hermes-agent/gateway` and
 `ghcr.io/vitofico/hermes-agent/router`. The catalog pins reviewed companion
 builds by immutable digest. Override `images.IMAGE_HERMES_AGENT` and, when
 enabling the router, `images.IMAGE_HERMES_ALERT_ROUTER` to select a different
-reviewed build. Companion images remain private while publication is prepared;
-your cluster needs registry access until package visibility changes. Verify
-anonymous image pulls after publication. The companion gateway and router images
-currently target
+reviewed build. The companion source repository and both nested image packages
+are public; the pinned defaults can be pulled anonymously without a GitHub
+registry credential. Private alternative images may need operator-managed
+registry access. The companion gateway and router images currently target
 `linux/amd64`; use independently validated alternative images on other
 architectures. Compatible alternatives remain supported through these overrides.
 The image must start the Hermes messaging gateway, support

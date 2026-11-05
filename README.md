@@ -140,8 +140,9 @@ DuckDNS, deSEC/dedyn, FreeDNS, and Dynu. It starts suspended and uses your own
 provider credentials. Follow [dynamic DNS setup](docs/dynamic-dns.md) before
 enabling updates. The kit retains explicit image overrides for all three; pin
 reviewed digests.
-Companion publication is being prepared; currently pinned companion images may
-require registry authentication until their package visibility changes.
+The companion source repositories and all three pinned image packages are public.
+The default images can be pulled anonymously; no GitHub registry credential is
+required. Private image overrides may require operator-managed registry access.
 
 ## Develop and contribute
 

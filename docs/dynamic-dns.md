@@ -10,10 +10,11 @@ requires no Argo installation.
 The catalog pins the reviewed companion image by immutable digest. Its OCI
 index includes `linux/amd64` and `linux/arm64` variants. Use
 `images.IMAGE_DYNAMIC_DNS_UPDATER` to select a different reviewed release or a
-compatible alternative. The pinned image is currently private while public
-publication is being prepared; deployment needs registry access until package
-visibility changes. Verify an anonymous pull after publication. Existing provider
-credentials must never be built into an image.
+compatible alternative. The companion source repository and nested image package
+are public. The pinned default can be pulled anonymously without a GitHub
+registry credential; a private image override may require operator-managed
+registry access. DNS provider credentials are still required and must never be
+built into an image.
 
 ## Configure locally
 
