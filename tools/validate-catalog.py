@@ -132,6 +132,7 @@ def main():
     catalog = lab.catalog()
     cfg.update(profile='server', domain='schema.example.net', applications=list(catalog))
     cfg['network']['ftp_ip'] = '192.0.2.11'
+    cfg['ddns'] = {'provider': 'desec', 'domains': 'host.example.net', 'suspend': True}
     cfg['hermes'] = {'api_cidrs': ['192.0.2.1/32'],
                      'repair_targets': [{'namespace': 'audiobookshelf', 'deployment': 'audiobookshelf'}],
                      'telegram': {'enabled': True, 'allowed_users': ['123456789']}}

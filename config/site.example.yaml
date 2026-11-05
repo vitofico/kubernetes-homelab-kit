@@ -26,3 +26,8 @@ hermes:
   telegram:
     enabled: false
     allowed_users: []
+ddns:
+  provider: duckdns
+  schedule: '*/15 * * * *'
+  suspend: true
+  domains: ''

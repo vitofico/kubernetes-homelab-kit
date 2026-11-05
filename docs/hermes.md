@@ -7,16 +7,34 @@ opt-in restart workflow from an authenticated chat.
 
 ## Image and platform prerequisites
 
-Provide your own compatible image in `images.IMAGE_HERMES_AGENT`. Pin an immutable
-digest for deployment. The image must start the Hermes messaging gateway, support
+The companion [Hermes container repository](https://github.com/vitofico/hermes-agent)
+builds `ghcr.io/vitofico/hermes-agent/gateway` and
+`ghcr.io/vitofico/hermes-agent/router`. The catalog pins reviewed companion
+builds by immutable digest. Override `images.IMAGE_HERMES_AGENT` and, when
+enabling the router, `images.IMAGE_HERMES_ALERT_ROUTER` to select a different
+reviewed build. The companion source repository and both nested image packages
+are public; the pinned defaults can be pulled anonymously without a GitHub
+registry credential. Private alternative images may need operator-managed
+registry access. The companion gateway and router images currently target
+`linux/amd64`; use independently validated alternative images on other
+architectures. Compatible alternatives remain supported through these overrides.
+The image must start the Hermes messaging gateway, support
 the configured Anthropic model and Telegram adapter, contain Python 3 with TLS
 and a POSIX shell, and run correctly as UID/GID `10000` with dropped capabilities.
 It must honor `HOME`, `HERMES_HOME`, and `HERMES_WRITE_SAFE_ROOT`, load skills from
 `$HERMES_HOME/skills`, and expose the webhook health endpoint on port `8644`.
+
+The webhook route deliberately sets `toolsets: []`. A compatible image must
+preserve that explicit empty list through both the webhook adapter and the turn
+tool resolver, including default MCP tools. Some upstream versions interpret an
+empty list as a request for default tools. The companion build patches and tests
+this behavior for its pinned base; independently verify this contract before
+selecting another image or upgrading the base.
+
 An image name alone does not establish compatibility. Some upstream container
 entrypoints require root for supervision; adapt the entrypoint to run the gateway
-as this UID and verify it before selecting that image. This repository does not
-publish an agent image or run an install script during deployment.
+as this UID and verify it before selecting that image. The companion repository
+owns image releases; this kit runs no install script during deployment.
 
 The kit mounts `/opt/hermes-ops/ops.py`, supplies the `cluster-ops` skill, and copies
 managed configuration into the persistent Hermes home at startup. Persistent
@@ -38,15 +56,13 @@ are blocked; DNS64/NAT64-only networks require a separately reviewed egress poli
 ## Configure the integration
 
 Merge these fields into ignored `local/site.yaml`, retaining other required
-configuration. These are documentation examples, not a published image or usable
-credentials:
+configuration. These settings use the pinned catalog image; the addresses and
+account identifier are synthetic examples, not usable credentials:
 
 ```yaml
 applications:
   - audiobookshelf
   - hermes-agent
-images:
-  IMAGE_HERMES_AGENT: registry.example.invalid/your-hermes:reviewed-version
 hermes:
   api_cidrs:
     - 192.0.2.1/32 # replace with each API address visible to your CNI
@@ -153,11 +169,13 @@ Keep old diagnostic kubeconfigs and manifests private.
 
 ## Optional alert router
 
-`hermes-alert-router` is a separate optional module requiring its own compatible
-image and catalog secret contract. Remote chat and restart requests do not need
+`hermes-alert-router` is a separate optional module using the companion
+`ghcr.io/vitofico/hermes-agent/router` image, pinned by digest through its image
+override and catalog secret contract. Remote chat and restart requests do not need
 it. Agent and router share generated `HERMES_WEBHOOK_SECRET`; the agent also
 receives it as upstream `WEBHOOK_SECRET`. The configured `uptime-kuma` webhook
-route authenticates with this secret, has no tools, and logs its response. Alerts
+route authenticates with this secret, explicitly disables tools, and logs its response
+when the selected image satisfies the no-tools contract above. Alerts
 provide evidence; they do not authorize repairs. See the
 [official webhook contract](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks)
 before adapting a router. A signed payload is not a trusted instruction.
@@ -171,6 +189,16 @@ actual broker against a disposable Kubernetes API independently of Hermes.
 It does not test a real model or Telegram account.
 
 Before relying on remote recovery, test your chosen image loading the skill,
-successful status reads, blocked direct writes, rejected unauthorized chat users,
+successful status reads, blocked direct writes, a signed webhook with no tool execution, rejected unauthorized chat users,
 one approved restart, and observed application readiness. No real provider or
 chat messages are sent by default integration tests.
+
+## Transition from earlier images
+
+The fresh companion source repository publishes the gateway and router under
+`ghcr.io/vitofico/hermes-agent/gateway` and
+`ghcr.io/vitofico/hermes-agent/router`. Older flat image packages remain private
+and are retained during migration. They are separate packages; changing a
+source repository name does not change the image reference in a running
+deployment. Review the new digest and configuration contract before switching,
+then keep the prior pinned reference available for rollback.

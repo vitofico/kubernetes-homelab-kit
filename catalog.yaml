@@ -87,6 +87,9 @@ apps:
       transfer.
     depends_on: []
   hermes-agent:
+    source: https://github.com/vitofico/hermes-agent
+    default_images:
+      __IMAGE_HERMES_AGENT__: ghcr.io/vitofico/hermes-agent/gateway@sha256:f5856b44e256e48afcbff4346849a073f9a8c3d2ec027eaaf25c0baaff5af70f
     path: applications/hermes-agent
     namespace: agent
     secrets:
@@ -95,21 +98,23 @@ apps:
       hermes-agent-secrets:
       - HERMES_WEBHOOK_SECRET
     kind_supported: false
-    reason: Requires an operator-supplied image; not enabled by default.
+    reason: Requires provider credentials and operator-reviewed API and messaging access; not enabled by default.
     required_images:
-      __IMAGE_HERMES_AGENT__: Supply a publicly accessible compatible image for hermes-agent
+      __IMAGE_HERMES_AGENT__: Pin a reviewed ghcr.io/vitofico/hermes-agent/gateway release by digest
     depends_on: []
   hermes-alert-router:
+    source: https://github.com/vitofico/hermes-agent/tree/main/router
+    default_images:
+      __IMAGE_HERMES_ALERT_ROUTER__: ghcr.io/vitofico/hermes-agent/router@sha256:006e7d052a4965cc0742b38cba8a51bb5788b1d21e13228a539cddc34378902a
     path: applications/hermes-alert-router
     namespace: agent
     secrets:
       hermes-alert-router-shared:
       - webhook-shared-secret
     kind_supported: false
-    reason: Requires an operator-supplied image; not enabled by default.
+    reason: Requires a configured Hermes gateway and webhook credentials; not enabled by default.
     required_images:
-      __IMAGE_HERMES_ALERT_ROUTER__: Supply a publicly accessible compatible image
-        for hermes-alert-router
+      __IMAGE_HERMES_ALERT_ROUTER__: Pin a reviewed ghcr.io/vitofico/hermes-agent/router release by digest
     depends_on:
     - hermes-agent
   immich-deduper:
@@ -210,3 +215,15 @@ apps:
     depends_on:
     - traefik
     - cert-manager
+  dynamic-dns-updater:
+    path: applications/dynamic-dns-updater
+    namespace: dynamic-dns-updater
+    secrets: {}
+    kind_supported: false
+    reason: Updates external DNS through operator-supplied provider credentials; excluded from kind.
+    source: https://github.com/vitofico/dynamic-dns-updater
+    default_images:
+      __IMAGE_DYNAMIC_DNS_UPDATER__: ghcr.io/vitofico/dynamic-dns-updater/updater@sha256:b39ba05f8379e6949126cdc507f07f2b6c21a505ff078f7800c2d99d92bd293b
+    required_images:
+      __IMAGE_DYNAMIC_DNS_UPDATER__: Pin a reviewed ghcr.io/vitofico/dynamic-dns-updater/updater release by digest
+    depends_on: []

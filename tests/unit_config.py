@@ -40,6 +40,18 @@ class ConfigurationTests(unittest.TestCase):
     def test_accepts_example_with_catalog(self):
         self.assertEqual(lab.config(self.path)['profile'], 'kind')
 
+    def test_selected_catalog_image_defaults_preserve_both_override_spellings(self):
+        marker = '__IMAGE_SAMPLE__'
+        default = 'registry.example.invalid/sample@sha256:' + '0' * 64
+        self.cat['apps']['sample'].update(required_images={marker: 'reviewed image'}, default_images={marker: default})
+        (self.root / 'catalog.yaml').write_text(yaml.safe_dump(self.cat))
+        self.assertEqual(lab.config(self.path)['images'][marker], default)
+        for key in (marker, marker.strip('_')):
+            self.cfg['images'] = {key: 'registry.example.invalid/override:review'}
+            self.write()
+            images = lab.config(self.path)['images']
+            self.assertEqual(images, self.cfg['images'])
+
     def test_rejects_unknown_inputs_and_apps(self):
         for field, value in [('unexpected', 'x'), ('applications', ['missing']), ('profile', 'other'), ('domain', 'bad/domain')]:
             cfg = copy.deepcopy(self.cfg)

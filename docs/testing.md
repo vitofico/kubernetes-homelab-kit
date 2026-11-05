@@ -109,3 +109,15 @@ the first failing run and successful rechecks remain distinct in private logs.
 Final teardown used the explicit test kubeconfig. Verification confirmed that only
 the owned test cluster was removed and the unrelated cluster inventory was
 preserved. No live server deployment or global Docker cleanup was performed.
+
+The optional `dynamic-dns-updater` module is schema-validated with synthetic
+settings. Unit tests exercise provider-specific secret selection, suspension,
+configuration rejection and rendering. It is excluded from kind because it
+updates external DNS; no live provider requests are made. Real provider
+acceptance is an operator step described in [dynamic DNS setup](dynamic-dns.md).
+
+The companion-publication integration pass also completed `make test-kind-all`:
+the default profile and broker authority/revocation checks passed, followed by
+all eight additional kind-supported catalog modules. This validates generic
+render/deploy behavior and disposable application smoke checks; the companion
+Hermes model/chat and live DNS providers remain separate acceptance checks.

@@ -126,6 +126,24 @@ Status and chat data may reach your model provider. Image requirements, setup,
 permissions, commands, and remaining risks are in the [Hermes guide](docs/hermes.md).
 Real provider and chat delivery require operator acceptance testing.
 
+## Companion container projects
+
+[Hermes Agent containers](https://github.com/vitofico/hermes-agent) supply the
+agent and authenticated alert-router images. The catalog pins reviewed companion
+builds; override them through `IMAGE_HERMES_AGENT` and
+`IMAGE_HERMES_ALERT_ROUTER` when needed. See the
+[Hermes guide](docs/hermes.md) for compatibility and acceptance checks.
+
+[Dynamic DNS Updater](https://github.com/vitofico/dynamic-dns-updater) supplies
+`ghcr.io/vitofico/dynamic-dns-updater/updater`. Its optional scheduled module supports
+DuckDNS, deSEC/dedyn, FreeDNS, and Dynu. It starts suspended and uses your own
+provider credentials. Follow [dynamic DNS setup](docs/dynamic-dns.md) before
+enabling updates. The kit retains explicit image overrides for all three; pin
+reviewed digests.
+The companion source repositories and all three pinned image packages are public.
+The default images can be pulled anonymously; no GitHub registry credential is
+required. Private image overrides may require operator-managed registry access.
+
 ## Develop and contribute
 
 ```sh
